@@ -129,7 +129,7 @@ def build_profile(
         Stream configuration dict with keys ``platform``, ``resolution``,
         ``default_scene``.
     """
-    effective_obs_port = obs_port if obs_port else (obs_auto_detected_port or 4455)
+    effective_obs_port = obs_port if (obs_port is not None and obs_port != 0) else (obs_auto_detected_port or 4455)
     return {
         "language": language,
         "username": username.strip(),

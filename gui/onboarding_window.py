@@ -55,6 +55,10 @@ _YOUTUBE_PATTERN = re.compile(
     r"^https?://(www\.)?(youtube\.com|youtu\.be)/", re.IGNORECASE
 )
 
+# Characters used to mask sensitive tokens in the confirmation summary
+_TOKEN_MASK_CHAR = "●"
+_TOKEN_MASK_LENGTH = 8
+
 
 def _validate_youtube(value: str) -> bool:
     """Return True if value is a valid YouTube URL or empty."""
@@ -553,7 +557,7 @@ class OnboardingWindow(ctk.CTkToplevel):
         discord_token = self._discord_token_var.get().strip()
         discord_chan = self._discord_chan_var.get().strip()
         if discord_token:
-            discord_summary = f"{'●' * 8}  ch:{discord_chan or '—'}"
+            discord_summary = f"{_TOKEN_MASK_CHAR * _TOKEN_MASK_LENGTH}  ch:{discord_chan or '—'}"
         elif discord_chan:
             discord_summary = f"ch:{discord_chan}"
         else:
@@ -665,7 +669,7 @@ class OnboardingWindow(ctk.CTkToplevel):
     def _finish(self) -> None:
         """Build the profile dict and hand off to the caller."""
         obs_port_str = self._obs_port_var.get().strip()
-        obs_port = int(obs_port_str) if obs_port_str.isdigit() else 4455
+        obs_port = int(obs_port_str) if obs_port_str else 4455
 
         profile = build_profile(
             language=self._lang,
