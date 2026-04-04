@@ -143,7 +143,7 @@ def main() -> None:
     out = os.path.join(os.path.dirname(__file__), "aura.ico")
     with open(out, "wb") as fh:
         fh.write(_pack_ico(frames))
-    print(f"Icon saved → {out}  ({os.path.getsize(out)} bytes, {len(SIZES)} resolutions)")
+    print(f"Icon saved -> {out}  ({os.path.getsize(out)} bytes, {len(SIZES)} resolutions)")
 
 
 if __name__ == "__main__":

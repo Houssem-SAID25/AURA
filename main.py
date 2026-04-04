@@ -7,7 +7,7 @@ Entry point: starts the assistant and runs the continuous listening loop.
 import logging
 import sys
 
-from utils.config_loader import load_config
+from utils.config_loader import load_config, validate_config
 from utils.logger import setup_logging
 from voice.speech_to_text import SpeechToText
 from voice.text_to_speech import TextToSpeech
@@ -18,6 +18,7 @@ from core.action_handler import ActionHandler
 def main() -> None:
     """Main entry point – initialise modules and run the voice command loop."""
     config = load_config()
+    config = validate_config(config)
     setup_logging(config)
 
     logger = logging.getLogger("AURA")
