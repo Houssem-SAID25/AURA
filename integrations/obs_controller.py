@@ -20,9 +20,13 @@ from __future__ import annotations
 import logging
 import subprocess
 import os
+import time
 from typing import Optional
 
 logger = logging.getLogger(__name__)
+
+# Seconds to wait before retrying a failed OBS connection.
+_CONNECT_COOLDOWN = 5.0
 
 
 class OBSController:
@@ -30,6 +34,9 @@ class OBSController:
     Interface to OBS Studio over WebSocket.
 
     Connection is established lazily on the first call that needs it.
+    After a failed connection attempt a short cooldown prevents hammering the
+    WebSocket server; after a mid-session error the stale client is dropped so
+    the next call triggers a fresh reconnect.
     """
 
     def __init__(self, config: dict) -> None:
@@ -39,6 +46,7 @@ class OBSController:
         self._password: str = self._obs_cfg.get("password", "")
         self._obs_path: str = self._obs_cfg.get("path", "")
         self._client = None  # obsws_python client, connected lazily
+        self._last_connect_attempt: float = 0.0  # epoch seconds
 
     # ------------------------------------------------------------------
     # Connection management
@@ -49,9 +57,17 @@ class OBSController:
         Attempt to connect to the OBS WebSocket server.
 
         Returns True if already connected or the connection succeeds.
+        A cooldown of :data:`_CONNECT_COOLDOWN` seconds is enforced between
+        failed attempts to avoid hammering the server.
         """
         if self._client is not None:
             return True
+
+        now = time.monotonic()
+        if now - self._last_connect_attempt < _CONNECT_COOLDOWN:
+            return False
+
+        self._last_connect_attempt = now
         try:
             import obsws_python as obs  # noqa: PLC0415
 
@@ -80,6 +96,10 @@ class OBSController:
             finally:
                 self._client = None
 
+    def _invalidate_client(self) -> None:
+        """Drop the cached client so the next call triggers a fresh reconnect."""
+        self._client = None
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -102,6 +122,7 @@ class OBSController:
             return True, ""
         except Exception as exc:  # pylint: disable=broad-except
             logger.error("start_stream failed: %s", exc)
+            self._invalidate_client()
             return False, str(exc)
 
     def stop_streaming(self) -> tuple[bool, str]:
@@ -118,6 +139,7 @@ class OBSController:
             return True, ""
         except Exception as exc:  # pylint: disable=broad-except
             logger.error("stop_stream failed: %s", exc)
+            self._invalidate_client()
             return False, str(exc)
 
     def switch_scene(self, scene_name: str) -> tuple[bool, str]:
@@ -136,6 +158,7 @@ class OBSController:
             return True, ""
         except Exception as exc:  # pylint: disable=broad-except
             logger.error("switch_scene failed: %s", exc)
+            self._invalidate_client()
             return False, str(exc)
 
     def get_scenes(self) -> list[str]:
@@ -151,6 +174,7 @@ class OBSController:
             return [s["sceneName"] for s in response.scenes]
         except Exception as exc:  # pylint: disable=broad-except
             logger.error("get_scenes failed: %s", exc)
+            self._invalidate_client()
             return []
 
     def get_stream_status(self) -> Optional[dict]:
@@ -166,4 +190,5 @@ class OBSController:
             return {"outputActive": resp.output_active}
         except Exception as exc:  # pylint: disable=broad-except
             logger.error("get_stream_status failed: %s", exc)
+            self._invalidate_client()
             return None

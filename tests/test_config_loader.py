@@ -116,3 +116,30 @@ class TestValidateConfig:
         assert result["voice"]["whisper_model"] == "small"
         assert result["logging"]["level"] == "DEBUG"
         assert result["games"] == {"valorant": "C:\\val.exe"}
+
+    def test_placeholder_password_triggers_warning(self, caplog):
+        import logging
+        with caplog.at_level(logging.WARNING):
+            validate_config({"obs": {"password": "your_obs_websocket_password"}})
+        assert any(
+            "placeholder" in record.message.lower()
+            for record in caplog.records
+        )
+
+    def test_placeholder_client_id_triggers_warning(self, caplog):
+        import logging
+        with caplog.at_level(logging.WARNING):
+            validate_config({"twitch": {"client_id": "your_twitch_client_id"}})
+        assert any(
+            "placeholder" in record.message.lower()
+            for record in caplog.records
+        )
+
+    def test_real_value_no_placeholder_warning(self, caplog):
+        import logging
+        with caplog.at_level(logging.WARNING):
+            validate_config({"obs": {"password": "s3cr3t!"}})
+        placeholder_warnings = [
+            r for r in caplog.records if "placeholder" in r.message.lower()
+        ]
+        assert placeholder_warnings == []

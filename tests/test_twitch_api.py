@@ -67,8 +67,10 @@ def api_no_creds() -> TwitchAPI:
 
 class TestTokenAcquisition:
     def test_token_obtained_successfully(self, api_with_creds):
-        with patch("requests.post", return_value=_make_mock_response(TOKEN_RESPONSE)):
-            result = api_with_creds._ensure_token()
+        api_with_creds._session.post = MagicMock(
+            return_value=_make_mock_response(TOKEN_RESPONSE)
+        )
+        result = api_with_creds._ensure_token()
         assert result is True
         assert api_with_creds._access_token == "fake_token_abc123"
 
@@ -77,9 +79,22 @@ class TestTokenAcquisition:
         assert result is False
 
     def test_network_error_returns_false(self, api_with_creds):
-        with patch("requests.post", side_effect=Exception("network error")):
-            result = api_with_creds._ensure_token()
+        api_with_creds._session.post = MagicMock(side_effect=Exception("network error"))
+        result = api_with_creds._ensure_token()
         assert result is False
+
+    def test_session_is_reused(self, api_with_creds):
+        """The same session object should be used for all requests."""
+        session_id = id(api_with_creds._session)
+        # Inject token so _ensure_token doesn't need to POST
+        api_with_creds._access_token = "tok"
+        api_with_creds._token_expiry = float("inf")
+        api_with_creds._session.get = MagicMock(
+            return_value=_make_mock_response(TOP_GAMES_RESPONSE)
+        )
+        api_with_creds.get_top_games(limit=3)
+        api_with_creds.get_top_games(limit=3)
+        assert id(api_with_creds._session) == session_id
 
 
 class TestGetTopGames:
@@ -90,11 +105,10 @@ class TestGetTopGames:
 
     def test_returns_game_list(self, api_with_creds):
         self._patch_token(api_with_creds)
-        with patch(
-            "requests.get",
-            return_value=_make_mock_response(TOP_GAMES_RESPONSE),
-        ):
-            games = api_with_creds.get_top_games(limit=5)
+        api_with_creds._session.get = MagicMock(
+            return_value=_make_mock_response(TOP_GAMES_RESPONSE)
+        )
+        games = api_with_creds.get_top_games(limit=5)
         assert len(games) == 6  # mock returns 6 games
         assert games[0]["name"] == "Fortnite"
 
@@ -104,8 +118,8 @@ class TestGetTopGames:
 
     def test_network_error_returns_empty(self, api_with_creds):
         self._patch_token(api_with_creds)
-        with patch("requests.get", side_effect=Exception("timeout")):
-            games = api_with_creds.get_top_games()
+        api_with_creds._session.get = MagicMock(side_effect=Exception("timeout"))
+        games = api_with_creds.get_top_games()
         assert games == []
 
 
@@ -116,25 +130,24 @@ class TestSuggestGame:
 
     def test_suggest_skips_top_5(self, api_with_creds):
         self._patch_token(api_with_creds)
-        with patch(
-            "requests.get",
-            return_value=_make_mock_response(TOP_GAMES_RESPONSE),
-        ):
-            suggestion = api_with_creds.suggest_game(top_n=6, skip_top=5)
+        api_with_creds._session.get = MagicMock(
+            return_value=_make_mock_response(TOP_GAMES_RESPONSE)
+        )
+        suggestion = api_with_creds.suggest_game(top_n=6, skip_top=5)
         # Should return the 6th game (index 5) = "League of Legends"
         assert suggestion == "League of Legends"
 
     def test_suggest_fallback_when_skip_exceeds_results(self, api_with_creds):
         self._patch_token(api_with_creds)
         small_response = {"data": [{"id": "1", "name": "Fortnite", "box_art_url": ""}]}
-        with patch(
-            "requests.get",
-            return_value=_make_mock_response(small_response),
-        ):
-            suggestion = api_with_creds.suggest_game(top_n=1, skip_top=5)
+        api_with_creds._session.get = MagicMock(
+            return_value=_make_mock_response(small_response)
+        )
+        suggestion = api_with_creds.suggest_game(top_n=1, skip_top=5)
         # Fallback: last item in the list
         assert suggestion == "Fortnite"
 
     def test_no_creds_returns_none(self, api_no_creds):
         suggestion = api_no_creds.suggest_game()
         assert suggestion is None
+

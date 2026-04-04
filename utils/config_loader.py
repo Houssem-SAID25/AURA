@@ -49,6 +49,18 @@ _DEFAULTS: dict[str, Any] = {
     },
 }
 
+# Substrings that indicate a value is still an unconfigured template placeholder.
+# Checked case-insensitively against string config values.
+_PLACEHOLDER_HINTS = (
+    "your_",
+    "your ",
+    "<your",
+    "changeme",
+    "replace_me",
+    "todo",
+    "xxxx",
+)
+
 
 def load_config(path: str = "config.json") -> dict:
     """
@@ -92,6 +104,9 @@ def validate_config(config: dict) -> dict:
     :data:`_DEFAULTS` and a ``WARNING`` is emitted for each so that users
     know exactly what to configure.
 
+    Values that still contain obvious template placeholders (e.g.
+    ``"your_obs_websocket_password"``) are also flagged with a ``WARNING``.
+
     Parameters
     ----------
     config:
@@ -113,12 +128,21 @@ def validate_config(config: dict) -> dict:
         merged = {**defaults, **user_section}
         # Warn about keys that still hold the empty placeholder value
         for key, default_val in defaults.items():
-            if default_val == "" and merged.get(key) == "":
+            value = merged.get(key)
+            if default_val == "" and value == "":
                 logger.warning(
                     "config.json: '%s.%s' is not set. "
                     "Some features may not work.",
                     section,
                     key,
+                )
+            elif isinstance(value, str) and _is_placeholder(value):
+                logger.warning(
+                    "config.json: '%s.%s' looks like an unconfigured placeholder (%r). "
+                    "Please replace it with a real value.",
+                    section,
+                    key,
+                    value,
                 )
         validated[section] = merged
 
@@ -128,3 +152,9 @@ def validate_config(config: dict) -> dict:
             validated[key] = value
 
     return validated
+
+
+def _is_placeholder(value: str) -> bool:
+    """Return True if *value* looks like an unfilled template placeholder."""
+    lower = value.lower()
+    return any(hint in lower for hint in _PLACEHOLDER_HINTS)
