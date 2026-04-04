@@ -45,6 +45,7 @@ class OBSController:
         self._port: int = int(self._obs_cfg.get("port", 4455))
         self._password: str = self._obs_cfg.get("password", "")
         self._obs_path: str = self._obs_cfg.get("path", "")
+        self._mic_input: str = self._obs_cfg.get("mic_input_name", "Mic/Aux")
         self._client = None  # obsws_python client, connected lazily
         self._last_connect_attempt: float = 0.0  # epoch seconds
 
@@ -192,3 +193,98 @@ class OBSController:
             logger.error("get_stream_status failed: %s", exc)
             self._invalidate_client()
             return None
+
+    def mute_microphone(self) -> tuple[bool, str]:
+        """
+        Mute the configured microphone input in OBS.
+
+        The input name is taken from ``obs.mic_input_name`` in ``config.json``
+        (default: ``"Mic/Aux"``).
+
+        Returns ``(True, "")`` on success or ``(False, error_message)``.
+        """
+        if not self._connect():
+            return False, "OBS is not running or WebSocket is not reachable."
+        try:
+            self._client.set_input_mute(self._mic_input, True)
+            logger.info("OBS microphone '%s' muted.", self._mic_input)
+            return True, ""
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.error("mute_microphone failed: %s", exc)
+            self._invalidate_client()
+            return False, str(exc)
+
+    def unmute_microphone(self) -> tuple[bool, str]:
+        """
+        Unmute the configured microphone input in OBS.
+
+        Returns ``(True, "")`` on success or ``(False, error_message)``.
+        """
+        if not self._connect():
+            return False, "OBS is not running or WebSocket is not reachable."
+        try:
+            self._client.set_input_mute(self._mic_input, False)
+            logger.info("OBS microphone '%s' unmuted.", self._mic_input)
+            return True, ""
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.error("unmute_microphone failed: %s", exc)
+            self._invalidate_client()
+            return False, str(exc)
+
+    def trigger_overlay(
+        self, source_name: str, duration_ms: int = 3000
+    ) -> tuple[bool, str]:
+        """
+        Show a scene-item overlay for *duration_ms* milliseconds then hide it.
+
+        This is useful for triggering alert overlays (raids, subscriptions, etc.)
+        in the current OBS scene.
+
+        Parameters
+        ----------
+        source_name:
+            Name of the OBS scene item / source to show briefly.
+        duration_ms:
+            How long to keep the item visible, in milliseconds (default 3 000).
+
+        Returns ``(True, "")`` on success or ``(False, error_message)``.
+        """
+        if not source_name:
+            return False, "Source name must not be empty."
+        if not self._connect():
+            return False, "OBS is not running or WebSocket is not reachable."
+        try:
+            # Retrieve the current scene to find the scene-item ID
+            scene_resp = self._client.get_current_program_scene()
+            scene_name: str = scene_resp.current_program_scene_name
+
+            items_resp = self._client.get_scene_item_list(scene_name)
+            item_id: Optional[int] = None
+            for item in items_resp.scene_items:
+                if item.get("sourceName") == source_name:
+                    item_id = item.get("sceneItemId")
+                    break
+
+            if item_id is None:
+                return False, f"Source '{source_name}' not found in current scene."
+
+            # Show the item
+            self._client.set_scene_item_enabled(scene_name, item_id, True)
+            logger.info("OBS overlay '%s' shown for %d ms.", source_name, duration_ms)
+
+            # Schedule hide after duration_ms in a background thread
+            def _hide():
+                time.sleep(duration_ms / 1000.0)
+                try:
+                    self._client.set_scene_item_enabled(scene_name, item_id, False)
+                    logger.info("OBS overlay '%s' hidden.", source_name)
+                except Exception as hide_exc:  # pylint: disable=broad-except
+                    logger.warning("Could not hide overlay '%s': %s", source_name, hide_exc)
+
+            import threading  # noqa: PLC0415
+            threading.Thread(target=_hide, daemon=True, name="AURA-OverlayHide").start()
+            return True, ""
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.error("trigger_overlay failed: %s", exc)
+            self._invalidate_client()
+            return False, str(exc)

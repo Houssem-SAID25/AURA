@@ -199,3 +199,122 @@ class TestStreamStatus:
             status = controller.get_stream_status()
         assert status is None
 
+
+# ---------------------------------------------------------------------------
+# Mute / Unmute microphone
+# ---------------------------------------------------------------------------
+
+DUMMY_CONFIG_MIC: dict = {
+    "obs": {
+        "host": "localhost",
+        "port": 4455,
+        "password": "secret",
+        "path": "",
+        "mic_input_name": "Desktop Mic",
+    }
+}
+
+
+@pytest.fixture()
+def controller_mic() -> OBSController:
+    return OBSController(DUMMY_CONFIG_MIC)
+
+
+class TestMuteUnmute:
+    def test_mute_microphone_success(self, controller_mic):
+        mock_client = _mock_obs_client()
+        controller_mic._client = mock_client
+        success, msg = controller_mic.mute_microphone()
+        assert success is True
+        assert msg == ""
+        mock_client.set_input_mute.assert_called_once_with("Desktop Mic", True)
+
+    def test_unmute_microphone_success(self, controller_mic):
+        mock_client = _mock_obs_client()
+        controller_mic._client = mock_client
+        success, msg = controller_mic.unmute_microphone()
+        assert success is True
+        assert msg == ""
+        mock_client.set_input_mute.assert_called_once_with("Desktop Mic", False)
+
+    def test_mute_no_obs(self, controller):
+        with patch("obsws_python.ReqClient", side_effect=ConnectionRefusedError):
+            success, msg = controller.mute_microphone()
+        assert success is False
+        assert len(msg) > 0
+
+    def test_unmute_no_obs(self, controller):
+        with patch("obsws_python.ReqClient", side_effect=ConnectionRefusedError):
+            success, msg = controller.unmute_microphone()
+        assert success is False
+
+    def test_mute_error_invalidates_client(self, controller):
+        mock_client = _mock_obs_client()
+        mock_client.set_input_mute.side_effect = OSError("pipe broken")
+        controller._client = mock_client
+        success, _ = controller.mute_microphone()
+        assert success is False
+        assert controller._client is None
+
+    def test_unmute_error_invalidates_client(self, controller):
+        mock_client = _mock_obs_client()
+        mock_client.set_input_mute.side_effect = OSError("pipe broken")
+        controller._client = mock_client
+        success, _ = controller.unmute_microphone()
+        assert success is False
+        assert controller._client is None
+
+
+# ---------------------------------------------------------------------------
+# Overlay triggering
+# ---------------------------------------------------------------------------
+
+class TestTriggerOverlay:
+    def _mock_client_with_scene(self, scene_name="Gaming", source_name="AlertOverlay", item_id=7):
+        mock_client = _mock_obs_client()
+        # get_current_program_scene
+        scene_resp = MagicMock()
+        scene_resp.current_program_scene_name = scene_name
+        mock_client.get_current_program_scene.return_value = scene_resp
+        # get_scene_item_list
+        items_resp = MagicMock()
+        items_resp.scene_items = [
+            {"sourceName": source_name, "sceneItemId": item_id},
+            {"sourceName": "Background", "sceneItemId": 1},
+        ]
+        mock_client.get_scene_item_list.return_value = items_resp
+        return mock_client
+
+    def test_trigger_overlay_success(self, controller):
+        mock_client = self._mock_client_with_scene()
+        controller._client = mock_client
+        success, msg = controller.trigger_overlay("AlertOverlay", duration_ms=100)
+        assert success is True
+        assert msg == ""
+        mock_client.set_scene_item_enabled.assert_called_once_with("Gaming", 7, True)
+
+    def test_trigger_overlay_empty_source_fails(self, controller):
+        success, msg = controller.trigger_overlay("")
+        assert success is False
+        assert "empty" in msg.lower()
+
+    def test_trigger_overlay_source_not_found(self, controller):
+        mock_client = self._mock_client_with_scene()
+        controller._client = mock_client
+        success, msg = controller.trigger_overlay("NonExistentSource")
+        assert success is False
+        assert "not found" in msg.lower()
+
+    def test_trigger_overlay_no_obs(self, controller):
+        with patch("obsws_python.ReqClient", side_effect=ConnectionRefusedError):
+            success, msg = controller.trigger_overlay("AlertOverlay")
+        assert success is False
+
+    def test_trigger_overlay_error_invalidates_client(self, controller):
+        mock_client = _mock_obs_client()
+        mock_client.get_current_program_scene.side_effect = OSError("pipe broken")
+        controller._client = mock_client
+        success, _ = controller.trigger_overlay("AlertOverlay")
+        assert success is False
+        assert controller._client is None
+

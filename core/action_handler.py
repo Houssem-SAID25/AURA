@@ -46,6 +46,9 @@ class ActionHandler:
             "launch_game": self._handle_launch_game,
             "trending_games": self._handle_trending_games,
             "suggest_game": self._handle_suggest_game,
+            "mute_mic": self._handle_mute_mic,
+            "unmute_mic": self._handle_unmute_mic,
+            "trigger_overlay": self._handle_trigger_overlay,
             "help": self._handle_help,
         }
 
@@ -192,3 +195,28 @@ class ActionHandler:
 
     def _handle_help(self, command: dict) -> str:  # noqa: ARG002
         return HELP_TEXT
+
+    def _handle_mute_mic(self, command: dict) -> str:  # noqa: ARG002
+        logger.info("Executing: mute microphone")
+        success, message = self._obs.mute_microphone()
+        if success:
+            return "Microphone muted."
+        return f"Could not mute microphone: {message}"
+
+    def _handle_unmute_mic(self, command: dict) -> str:  # noqa: ARG002
+        logger.info("Executing: unmute microphone")
+        success, message = self._obs.unmute_microphone()
+        if success:
+            return "Microphone unmuted."
+        return f"Could not unmute microphone: {message}"
+
+    def _handle_trigger_overlay(self, command: dict) -> str:
+        source_name: str = command.get("source", "")
+        duration_ms: int = int(command.get("duration_ms", 3000))
+        if not source_name:
+            return "Please specify an overlay source name."
+        logger.info("Executing: trigger overlay '%s' for %d ms", source_name, duration_ms)
+        success, message = self._obs.trigger_overlay(source_name, duration_ms)
+        if success:
+            return f"Overlay '{source_name}' triggered."
+        return f"Could not trigger overlay: {message}"
