@@ -15,7 +15,7 @@ try:
 except ImportError:
     raise SystemExit("Pillow is required: pip install Pillow")
 
-SIZES = [16, 32,48, 64, 128, 256]
+SIZES = [16, 32, 48, 64, 128, 256]
 BG   = (6, 13, 26, 255)        # deep navy
 CYAN = (0, 212, 255, 255)       # neon cyan
 
