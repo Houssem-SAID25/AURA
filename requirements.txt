@@ -1,0 +1,19 @@
+# Speech recognition & audio
+openai-whisper>=20231117
+SpeechRecognition>=3.10.0
+pyaudio>=0.2.14
+
+# Text-to-speech
+pyttsx3>=2.90
+
+# NLP / command parsing
+rapidfuzz>=3.5.2
+
+# OBS WebSocket
+obsws-python>=1.7.0
+
+# Twitch API
+requests>=2.31.0
+
+# Utilities
+python-dotenv>=1.0.0

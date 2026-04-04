@@ -1,0 +1,32 @@
+{
+  "obs": {
+    "host": "localhost",
+    "port": 4455,
+    "password": "your_obs_websocket_password",
+    "path": "C:\\Program Files\\obs-studio\\bin\\64bit\\obs64.exe"
+  },
+  "twitch": {
+    "client_id": "your_twitch_client_id",
+    "client_secret": "your_twitch_client_secret",
+    "channel": "your_channel_name",
+    "browser_url": "https://www.twitch.tv"
+  },
+  "games": {
+    "counter-strike 2": "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Counter-Strike Global Offensive\\cs2.exe",
+    "cs2": "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Counter-Strike Global Offensive\\cs2.exe",
+    "valorant": "C:\\Riot Games\\VALORANT\\live\\VALORANT.exe",
+    "minecraft": "C:\\Program Files (x86)\\Minecraft Launcher\\MinecraftLauncher.exe",
+    "fortnite": "C:\\Program Files\\Epic Games\\Fortnite\\FortniteGame\\Binaries\\Win64\\FortniteClient-Win64-Shipping.exe"
+  },
+  "voice": {
+    "whisper_model": "base",
+    "tts_rate": 175,
+    "tts_volume": 1.0,
+    "listen_timeout": 5,
+    "phrase_time_limit": 10
+  },
+  "logging": {
+    "level": "INFO",
+    "file": "aura.log"
+  }
+}
