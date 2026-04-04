@@ -58,14 +58,25 @@ AURA/
 │   ├── speech_to_text.py     # Whisper-based STT with Google fallback
 │   └── text_to_speech.py     # pyttsx3 TTS engine wrapper
 ├── core/
-│   ├── command_parser.py     # NLP intent classifier (fuzzy matching)
-│   └── action_handler.py     # Dispatches commands to integrations
+│   ├── command_parser.py     # Two-stage NLP classifier: registry → intent detection
+│   ├── command_registry.py   # Dynamic command registry (loads config/commands.json)
+│   ├── intent_detector.py    # Fuzzy intent detection (rapidfuzz)
+│   └── action_handler.py     # Execution engine: single-action and multi-action dispatch
 ├── integrations/
 │   ├── obs_controller.py     # OBS WebSocket control
 │   ├── twitch_api.py         # Twitch Helix API (trending games, suggestions)
 │   └── game_launcher.py      # Subprocess-based launcher for games and OBS
+├── utils/
+│   ├── logger.py             # Centralised logging setup
+│   ├── config_loader.py      # JSON config loader with graceful error handling
+│   └── error_handler.py      # handle_errors decorator + safe_execute helper
+├── config/
+│   └── commands.json         # Dynamic command registry (extend without touching code)
 └── tests/
+    ├── conftest.py
     ├── test_command_parser.py
+    ├── test_command_registry.py
+    ├── test_intent_detector.py
     ├── test_action_handler.py
     ├── test_game_launcher.py
     ├── test_obs_controller.py
@@ -156,6 +167,8 @@ The resulting `dist/AURA/` folder is self-contained — zip it and share.
 
 ## Supported Voice Commands
 
+### Single-action commands (handled by intent detection)
+
 | Voice command | Action |
 |---|---|
 | "Start stream" / "Go live" | Starts OBS streaming |
@@ -164,10 +177,51 @@ The resulting `dist/AURA/` folder is self-contained — zip it and share.
 | "Launch OBS" / "Open OBS Studio" | Launches OBS Studio |
 | "Open Twitch" | Opens your Twitch channel in the browser |
 | "Launch Counter-Strike 2" | Launches the configured game |
-| "I'm going to stream Valorant" | Launches Valorant |
 | "What's trending" / "Top games" | Lists top 5 Twitch games |
 | "Suggest a game" | Suggests a popular but unsaturated game |
 | "Help" | Lists available commands |
+
+### Compound commands (handled by `config/commands.json` registry)
+
+| Voice command | Actions triggered |
+|---|---|
+| "Stream CS2" / "Go live CS2" | Launch OBS → launch CS2 → open Twitch |
+| "Stream Valorant" / "Go live Valorant" | Launch OBS → launch Valorant → open Twitch |
+| "Stream Fortnite" | Launch OBS → launch Fortnite → open Twitch |
+| "Stream Minecraft" | Launch OBS → launch Minecraft → open Twitch |
+
+> **Extending commands:** Add entries to `config/commands.json` to create new
+> compound commands without modifying any Python code.
+
+---
+
+## Adding a Custom Command
+
+Open `config/commands.json` and add an entry:
+
+```json
+{
+  "stream_apex": {
+    "description": "Full streaming setup for Apex Legends",
+    "keywords": ["stream apex", "go live apex legends"],
+    "intent": "stream",
+    "game": "apex legends",
+    "actions": ["launch_obs", "launch_game", "open_twitch"]
+  }
+}
+```
+
+Then add the game path in `config.json`:
+
+```json
+{
+  "games": {
+    "apex legends": "C:\\...\\EALauncher.exe"
+  }
+}
+```
+
+No Python changes required.
 
 ---
 
@@ -183,20 +237,32 @@ pytest tests/ -v
 ## Architecture
 
 ```
-Microphone ──► SpeechToText (Whisper)
+Microphone ──► SpeechToText (Whisper / Google fallback)
                     │
                     ▼
-             CommandParser (fuzzy NLP)
+             CommandParser
+             ├─ Stage 1: CommandRegistry  (config/commands.json)
+             │           └─ multi-action compound commands
+             └─ Stage 2: IntentDetector   (fuzzy NLP matching)
+                         └─ single-action intent commands
                     │
                     ▼
-             ActionHandler (dispatch)
-            /    |     |      \
-     OBSCtrl  Twitch  Game   Browser
+             ActionHandler
+             ├─ single-action: dispatch on command["type"]
+             └─ multi-action:  execute each action in command["actions"]
+            /    |      |      \
+     OBSCtrl  Twitch   Game  Browser
               API    Launcher
                     │
                     ▼
              TextToSpeech (pyttsx3) ──► Speakers
 ```
+
+### Command processing flow
+
+1. **Registry lookup** — `CommandRegistry.match()` checks whether the input contains a keyword from `config/commands.json`.  A match returns a multi-action command dict immediately.
+2. **Intent detection** — If no registry command matches, `IntentDetector.detect()` uses fuzzy matching to identify the user's intent and `CommandParser` builds a single-action command dict.
+3. **Action execution** — `ActionHandler.execute()` runs the action(s) and returns a spoken response string.
 
 ---
 

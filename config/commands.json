@@ -1,0 +1,31 @@
+{
+  "_comment": "Dynamic command registry for AURA. Add new compound commands here without touching Python code.",
+  "stream_cs2": {
+    "description": "Launch full streaming setup for Counter-Strike 2",
+    "keywords": ["stream cs2", "stream counter strike 2", "go live cs2", "stream counter-strike 2"],
+    "intent": "stream",
+    "game": "counter-strike 2",
+    "actions": ["launch_obs", "launch_game", "open_twitch"]
+  },
+  "stream_valorant": {
+    "description": "Launch full streaming setup for Valorant",
+    "keywords": ["stream valorant", "go live valorant", "stream valo"],
+    "intent": "stream",
+    "game": "valorant",
+    "actions": ["launch_obs", "launch_game", "open_twitch"]
+  },
+  "stream_fortnite": {
+    "description": "Launch full streaming setup for Fortnite",
+    "keywords": ["stream fortnite", "go live fortnite"],
+    "intent": "stream",
+    "game": "fortnite",
+    "actions": ["launch_obs", "launch_game", "open_twitch"]
+  },
+  "stream_minecraft": {
+    "description": "Launch full streaming setup for Minecraft",
+    "keywords": ["stream minecraft", "go live minecraft"],
+    "intent": "stream",
+    "game": "minecraft",
+    "actions": ["launch_obs", "launch_game", "open_twitch"]
+  }
+}

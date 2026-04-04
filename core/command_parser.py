@@ -3,21 +3,26 @@ core/command_parser.py
 ======================
 NLP-based command classifier.
 
-Instead of rigid if/else matching, the parser uses fuzzy string matching
-(via `rapidfuzz`) against a flexible set of intent patterns.  Each intent
-maps to a canonical command type that `ActionHandler` knows how to execute.
+Parsing happens in two stages:
 
-Supported commands
+1. **Registry lookup** — the :class:`CommandRegistry` checks whether the
+   input matches a compound command defined in ``config/commands.json``
+   (e.g. "stream CS2" → launch OBS + launch game + open Twitch).
+2. **Intent detection** — if no registry command matches, the
+   :class:`IntentDetector` fuzzy-matches the input against a built-in
+   set of intent phrases and returns the best single-action intent.
+
+The parser always returns a structured dict (or ``None``) so that
+:class:`~core.action_handler.ActionHandler` never has to parse raw text.
+
+Returned dict keys
 ------------------
-- ``start_stream``     – "start stream", "go live", "begin streaming", …
-- ``stop_stream``      – "stop stream", "end stream", "stop streaming", …
-- ``switch_scene``     – "switch scene", "change scene to …", …
-- ``launch_game``      – "launch …", "open …", "play …", "I'm going to stream …"
-- ``launch_obs``       – "launch obs", "open obs", "start obs"
-- ``open_twitch``      – "open twitch", "go to twitch"
-- ``trending_games``   – "trending games", "what's popular", …
-- ``suggest_game``     – "suggest a game", "what should I play", …
-- ``help``             – "help", "what can you do", …
+- ``type``    – intent name (e.g. ``"start_stream"``, ``"launch_game"``).
+- ``actions`` – (registry commands only) ordered list of action names.
+- ``game``    – game name extracted from the utterance, or ``""``.
+- ``scene``   – scene name for ``switch_scene`` commands, or ``""``.
+- ``raw``     – normalised input text.
+- ``source``  – ``"registry"`` | ``"intent_detector"``.
 """
 
 from __future__ import annotations
@@ -26,134 +31,23 @@ import logging
 import re
 from typing import Optional
 
+from core.command_registry import CommandRegistry
+from core.intent_detector import IntentDetector
+
 logger = logging.getLogger(__name__)
-
-# ---------------------------------------------------------------------------
-# Intent definitions
-# ---------------------------------------------------------------------------
-# Each entry: (intent_name, list_of_example_phrases)
-# The parser fuzzy-matches user input against ALL example phrases and picks
-# the highest-scoring intent above the threshold.
-
-INTENTS: list[tuple[str, list[str]]] = [
-    (
-        "start_stream",
-        [
-            "start stream",
-            "start streaming",
-            "go live",
-            "begin stream",
-            "begin streaming",
-            "start broadcast",
-            "go on air",
-        ],
-    ),
-    (
-        "stop_stream",
-        [
-            "stop stream",
-            "stop streaming",
-            "end stream",
-            "end streaming",
-            "stop broadcast",
-            "go offline",
-            "stop live",
-        ],
-    ),
-    (
-        "switch_scene",
-        [
-            "switch scene",
-            "change scene",
-            "switch to scene",
-            "change to scene",
-            "select scene",
-        ],
-    ),
-    (
-        "launch_obs",
-        [
-            "launch obs studio",
-            "open obs studio",
-            "start obs studio",
-            "launch obs",
-            "open obs",
-            "start obs",
-            "run obs",
-        ],
-    ),
-    (
-        "open_twitch",
-        [
-            "open twitch",
-            "go to twitch",
-            "open twitch channel",
-            "navigate to twitch",
-        ],
-    ),
-    (
-        "launch_game",
-        [
-            "launch game",
-            "open game",
-            "play game",
-            "start game",
-            "run game",
-            "i'm going to stream",
-            "i am going to stream",
-            "let's play",
-            "lets play",
-        ],
-    ),
-    (
-        "trending_games",
-        [
-            "trending games",
-            "what is trending",
-            "what's trending",
-            "popular games",
-            "top games",
-            "most watched games",
-            "what games are popular",
-        ],
-    ),
-    (
-        "suggest_game",
-        [
-            "suggest a game",
-            "recommend a game",
-            "what should i play",
-            "which game should i stream",
-            "game suggestion",
-        ],
-    ),
-    (
-        "help",
-        [
-            "help",
-            "what can you do",
-            "list commands",
-            "show commands",
-            "available commands",
-        ],
-    ),
-]
-
-# Minimum fuzzy-match score (0–100) required to accept an intent.
-MATCH_THRESHOLD = 60
 
 
 class CommandParser:
     """
-    Classifies a transcribed voice command into a structured intent dict.
+    Classifies a transcribed voice command into a structured command dict.
 
-    Returns ``None`` when no intent scores above ``MATCH_THRESHOLD``.
+    Returns ``None`` when no registry command or intent can be matched.
     """
 
     def __init__(self, config: dict) -> None:  # noqa: ARG002
-        self._intents = INTENTS
-        self._threshold = MATCH_THRESHOLD
-        logger.info("CommandParser initialised with %d intents.", len(self._intents))
+        self._registry = CommandRegistry()
+        self._detector = IntentDetector()
+        logger.info("CommandParser initialised (registry + intent detector).")
 
     # ------------------------------------------------------------------
     # Public API
@@ -161,33 +55,49 @@ class CommandParser:
 
     def parse(self, text: str) -> Optional[dict]:
         """
-        Parse *text* into a command dict.
+        Parse *text* into a structured command dict.
 
-        Returns a dict with at least a ``"type"`` key on success, or
-        ``None`` when the input does not match any known intent.
+        Registry commands (multi-action) are tried first; single-action
+        intent detection is used as a fallback.
+
+        Parameters
+        ----------
+        text:
+            Raw transcribed voice input.
+
+        Returns
+        -------
+        dict or None
+            Structured command on success; ``None`` when nothing matches.
         """
         if not text:
             return None
 
         normalised = self._normalise(text)
-        best_intent, best_score = self._match_intent(normalised)
 
+        # --- Stage 1: registry lookup (compound / multi-action commands) ---
+        registry_cmd = self._registry.match(normalised)
+        if registry_cmd:
+            logger.debug(
+                "Registry match: '%s' for input: '%s'",
+                registry_cmd.get("name"),
+                normalised,
+            )
+            return registry_cmd
+
+        # --- Stage 2: intent detection (single-action commands) ---
+        intent, score = self._detector.detect(normalised)
         logger.debug(
-            "Best intent: '%s' (score=%d) for input: '%s'",
-            best_intent,
-            best_score,
+            "Intent detection: '%s' (score=%d) for input: '%s'",
+            intent,
+            score,
             normalised,
         )
 
-        if best_intent is None or best_score < self._threshold:
+        if intent is None:
             return None
 
-        # Disambiguate: if the top match is launch_obs but "obs" is not
-        # present in the text, it is more likely a launch_game command.
-        if best_intent == "launch_obs" and "obs" not in text:
-            best_intent = "launch_game"
-
-        return self._build_command(best_intent, normalised)
+        return self._build_command(intent, normalised)
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -200,55 +110,23 @@ class CommandParser:
         text = re.sub(r"[^\w\s]", "", text)
         return text
 
-    def _match_intent(self, text: str) -> tuple[Optional[str], int]:
-        """
-        Return the best-matching intent name and its fuzzy score.
-
-        Uses token_set_ratio so that word order doesn't matter as much.
-        Falls back gracefully if `rapidfuzz` is not installed.
-        """
-        try:
-            from rapidfuzz import fuzz  # noqa: PLC0415
-        except ImportError:
-            logger.warning("rapidfuzz not installed; using simple substring matching.")
-            return self._substring_match(text)
-
-        best_intent: Optional[str] = None
-        best_score = 0
-
-        for intent_name, examples in self._intents:
-            for example in examples:
-                score = fuzz.token_set_ratio(text, example)
-                if score > best_score:
-                    best_score = score
-                    best_intent = intent_name
-
-        return best_intent, best_score
-
-    def _substring_match(self, text: str) -> tuple[Optional[str], int]:
-        """Simple substring fallback when rapidfuzz is unavailable."""
-        for intent_name, examples in self._intents:
-            for example in examples:
-                if example in text or text in example:
-                    return intent_name, 100
-        return None, 0
-
-    def _build_command(self, intent: str, text: str) -> dict:
-        """Build a structured command dict from the matched intent and raw text."""
-        command: dict = {"type": intent, "raw": text}
+    @staticmethod
+    def _build_command(intent: str, text: str) -> dict:
+        """Build a structured command dict for a single-action intent."""
+        command: dict = {"type": intent, "raw": text, "source": "intent_detector"}
 
         if intent == "switch_scene":
-            # Extract scene name: "switch scene to <name>"
+            # Extract scene name after "to" or "scene": "switch scene to gameplay"
             match = re.search(r"(?:to|scene)\s+(.+)$", text)
             command["scene"] = match.group(1).strip() if match else ""
 
         elif intent == "launch_game":
-            # Extract game name from patterns like "launch <game>" / "play <game>" /
-            # "i'm going to stream <game>"
+            # Extract game name from: "launch <game>", "play <game>",
+            # "i'm going to stream <game>", "let's play <game>"
             patterns = [
                 r"(?:launch|open|play|start|run)\s+(.+)$",
-                r"(?:i(?:m|'m| am) going to stream)\s+(.+)$",
-                r"(?:let(?:s|'s) play)\s+(.+)$",
+                r"(?:im|i am) going to stream\s+(.+)$",
+                r"lets play\s+(.+)$",
             ]
             for pattern in patterns:
                 match = re.search(pattern, text)
