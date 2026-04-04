@@ -17,6 +17,7 @@ from typing import Optional
 from integrations.obs_controller import OBSController
 from integrations.twitch_api import TwitchAPI
 from integrations.game_launcher import GameLauncher
+from integrations.discord_bot import DiscordNotifier
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,7 @@ class ActionHandler:
         self._obs = OBSController(config)
         self._twitch = TwitchAPI(config)
         self._launcher = GameLauncher(config)
+        self._discord = DiscordNotifier(config)
 
         # Dispatch table: command type → handler method
         self._handlers: dict = {
@@ -123,6 +125,7 @@ class ActionHandler:
         logger.info("Executing: start stream")
         success, message = self._obs.start_streaming()
         if success:
+            self._discord.announce_stream_live()
             return "Stream started! You are now live."
         return f"Could not start stream: {message}"
 
@@ -130,6 +133,7 @@ class ActionHandler:
         logger.info("Executing: stop stream")
         success, message = self._obs.stop_streaming()
         if success:
+            self._discord.announce_stream_offline()
             return "Stream stopped. You are now offline."
         return f"Could not stop stream: {message}"
 

@@ -27,12 +27,14 @@ def handler():
         patch("integrations.obs_controller.OBSController.__init__", return_value=None),
         patch("integrations.twitch_api.TwitchAPI.__init__", return_value=None),
         patch("integrations.game_launcher.GameLauncher.__init__", return_value=None),
+        patch("integrations.discord_bot.DiscordNotifier.__init__", return_value=None),
     ):
         h = ActionHandler.__new__(ActionHandler)
         h._config = DUMMY_CONFIG
         h._obs = MagicMock()
         h._twitch = MagicMock()
         h._launcher = MagicMock()
+        h._discord = MagicMock()
         # Rebuild dispatch table referencing patched attributes
         h._handlers = {
             "start_stream": h._handle_start_stream,
@@ -43,6 +45,9 @@ def handler():
             "launch_game": h._handle_launch_game,
             "trending_games": h._handle_trending_games,
             "suggest_game": h._handle_suggest_game,
+            "mute_mic": h._handle_mute_mic,
+            "unmute_mic": h._handle_unmute_mic,
+            "trigger_overlay": h._handle_trigger_overlay,
             "help": h._handle_help,
         }
         return h
