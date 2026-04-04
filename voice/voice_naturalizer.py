@@ -106,6 +106,7 @@ def naturalize_text(
     text: str,
     hesitation_rate: float = 0.15,
     *,
+    mode: str = "default",
     rng: Optional[random.Random] = None,
 ) -> str:
     """Return a more natural, conversational version of *text*.
@@ -117,6 +118,16 @@ def naturalize_text(
     hesitation_rate:
         Probability (0.0 – 1.0) of prepending a hesitation phrase.
         Defaults to 0.15 (15%).
+    mode:
+        Voice style mode.  One of:
+
+        * ``"default"`` – balanced, suitable for general use.
+        * ``"gaming"``  – energetic; higher hesitation, exclamation bias.
+        * ``"calm"``    – subdued; no hesitation, slower prosody.
+        * ``"excited"`` – high-energy events (raids/subs); max hesitation,
+          exclamation injected.
+
+        Unknown values fall back to ``"default"``.
     rng:
         Optional :class:`random.Random` instance for reproducible tests.
         Uses the global RNG by default.
@@ -132,12 +143,72 @@ def naturalize_text(
 
     _rng = rng or random
 
+    # Adjust hesitation rate per mode
+    adjusted_rate = _mode_hesitation_rate(hesitation_rate, mode)
+
     result = _apply_substitutions(text)
     result = _cleanup_lists(result)
     result = _add_prosody(result)
-    result = _maybe_add_hesitation(result, hesitation_rate, _rng)
+    result = _apply_mode_transforms(result, mode, _rng)
+    result = _maybe_add_hesitation(result, adjusted_rate, _rng)
 
     return result.strip()
+
+
+# ---------------------------------------------------------------------------
+# Mode-aware helpers
+# ---------------------------------------------------------------------------
+
+# Per-mode hesitation rate multipliers
+_MODE_RATE_MULTIPLIER: dict[str, float] = {
+    "default": 1.0,
+    "gaming": 1.5,
+    "calm": 0.0,
+    "excited": 2.0,
+}
+
+# Energetic prefix phrases for gaming/excited modes
+_ENERGY_PREFIXES: list[str] = [
+    "Let's go! ",
+    "Alright! ",
+    "Here we go! ",
+]
+
+# Calm prefix phrases
+_CALM_PREFIXES: list[str] = [
+    "Sure, ",
+    "Of course, ",
+    "No problem — ",
+]
+
+
+def _mode_hesitation_rate(base_rate: float, mode: str) -> float:
+    """Return the hesitation rate adjusted for *mode*."""
+    multiplier = _MODE_RATE_MULTIPLIER.get(mode, 1.0)
+    return min(1.0, base_rate * multiplier)
+
+
+def _apply_mode_transforms(
+    text: str, mode: str, rng: random.Random
+) -> str:
+    """Apply mode-specific transformations to *text*."""
+    if mode == "gaming":
+        # Occasionally boost energy with an exclamation
+        if not text.endswith("!") and rng.random() < 0.3:
+            text = text.rstrip(".") + "!"
+    elif mode == "excited":
+        # Force exclamation + optional energy prefix
+        if not text.endswith("!"):
+            text = text.rstrip(".") + "!"
+        if rng.random() < 0.4:
+            text = rng.choice(_ENERGY_PREFIXES) + text
+    elif mode == "calm":
+        # Soften exclamations to periods
+        text = text.replace("!", ".")
+        # Occasionally prepend a calm prefix
+        if rng.random() < 0.2:
+            text = rng.choice(_CALM_PREFIXES) + text[0].lower() + text[1:]
+    return text
 
 
 # ---------------------------------------------------------------------------
