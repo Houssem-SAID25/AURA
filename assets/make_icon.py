@@ -78,7 +78,10 @@ def _make_frame(size: int) -> Image.Image:
     if size >= 64:
         font_size = max(8, size // 7)
         font = None
-        # Try common system fonts; fall back to Pillow's default
+        # Try common system/CI fonts in order of preference.
+        # On Windows builds Arial is always present; on Linux CI runners
+        # DejaVu or Liberation Sans are typically available.
+        # Falls back to Pillow's built-in raster font if none are found.
         for name in ("arialbd.ttf", "Arial Bold.ttf", "DejaVuSans-Bold.ttf",
                      "FreeSansBold.ttf", "LiberationSans-Bold.ttf"):
             try:
