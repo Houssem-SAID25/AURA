@@ -26,7 +26,8 @@ class AssistantSession:
     tts: object           # TextToSpeech
     parser: object        # CommandParser
     handler: object       # ActionHandler
-    events: Optional[object] = field(default=None)  # EventsManager (optional)
+    events: Optional[object] = field(default=None)   # EventsManager (optional)
+    decision_engine: Optional[object] = field(default=None)  # DecisionEngine (opt-in)
 
 
 def create_session(
@@ -80,5 +81,22 @@ def create_session(
         except Exception as exc:  # pylint: disable=broad-except
             logger.warning("Could not initialise EventsManager: %s", exc)
 
+    # Opt-in AI reasoning pipeline (voice.ai_reasoning: true in config.json)
+    decision_engine = None
+    if config.get("voice", {}).get("ai_reasoning", False):
+        try:
+            from core.decision_engine import DecisionEngine  # noqa: PLC0415
+            decision_engine = DecisionEngine(config, parser, handler, profile)
+            logger.info("DecisionEngine attached to session (ai_reasoning=true).")
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.warning("Could not initialise DecisionEngine: %s", exc)
+
     logger.info("AURA assistant session ready.")
-    return AssistantSession(stt=stt, tts=tts, parser=parser, handler=handler, events=events)
+    return AssistantSession(
+        stt=stt,
+        tts=tts,
+        parser=parser,
+        handler=handler,
+        events=events,
+        decision_engine=decision_engine,
+    )

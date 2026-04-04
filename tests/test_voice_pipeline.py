@@ -59,6 +59,7 @@ def config() -> dict:
             "tts_volume": 1.0,
             "listen_timeout": 5,
             "phrase_time_limit": 10,
+            "naturalizer": {"enabled": False},
         },
         "logging": {"level": "DEBUG", "file": ""},
     }

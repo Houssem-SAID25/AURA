@@ -194,13 +194,28 @@ def main() -> None:
         session.events.start()
         logger.info("Twitch event polling started.")
 
+    # Initialise wake word detector (Phase 1 of two-phase pipeline)
+    from voice.wake_word import WakeWordDetector  # noqa: PLC0415
+    wake_detector = WakeWordDetector(config)
+
     tts.speak("AURA is online. Ready to help you stream!")
     logger.info("AURA is ready. Listening for commands.")
+    if wake_detector.is_enabled:
+        logger.info("Wake word detection active — say 'AURA' to activate.")
 
     # Continuous listening loop
     while True:
         try:
-            logger.info("Listening…")
+            # ── Phase 1: Wake word (low-CPU idle) ────────────────────────
+            if wake_detector.is_enabled:
+                logger.info("Waiting for wake word…")
+                if not wake_detector.wait_for_wake_word():
+                    continue
+                logger.info("Wake word detected — listening for command.")
+            else:
+                logger.info("Listening…")
+
+            # ── Phase 2: Full command recognition ────────────────────────
             text = stt.listen()
 
             if not text:
@@ -208,22 +223,26 @@ def main() -> None:
 
             logger.info("Heard: %s", text)
 
-            # Parse the spoken text into a structured command
-            command = parser.parse(text)
-            logger.info("Parsed command: %s", command)
+            # ── Phase 3: Parse / AI reasoning ────────────────────────────
+            if session.decision_engine is not None:
+                response = session.decision_engine.process(text)
+            else:
+                command = parser.parse(text)
+                logger.info("Parsed command: %s", command)
 
-            if command is None:
-                tts.speak("Sorry, I didn't understand that command.")
-                continue
+                if command is None:
+                    tts.speak("Sorry, I didn't understand that command.")
+                    continue
 
-            # Execute the command and get a response message
-            response = handler.execute(command, raw_text=text)
+                response = handler.execute(command, raw_text=text)
+
             tts.speak(response)
 
         except KeyboardInterrupt:
             logger.info("Shutdown requested by user.")
             if session.events is not None:
                 session.events.stop()
+            wake_detector.stop_background()
             tts.speak("Goodbye! AURA shutting down.")
             break
         except Exception as exc:  # pylint: disable=broad-except

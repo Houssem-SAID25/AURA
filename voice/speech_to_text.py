@@ -66,6 +66,25 @@ class SpeechToText:
                 logger.warning("Whisper not available: %s", exc)
         return self._whisper_model
 
+    def preload(self) -> None:
+        """
+        Eagerly load the Whisper model in a background thread.
+
+        Call this immediately after construction to overlap model loading
+        with other startup tasks and eliminate the first-transcription delay.
+        The model is stored on ``self._whisper_model`` and reused by
+        :meth:`_load_whisper`.
+        """
+        import threading  # noqa: PLC0415
+
+        t = threading.Thread(
+            target=self._load_whisper,
+            daemon=True,
+            name="AURA-WhisperPreload",
+        )
+        t.start()
+        logger.info("Whisper model preload started in background thread.")
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------

@@ -37,6 +37,41 @@ jobs:
       - name: Build EXE with PyInstaller
         run: pyinstaller aura.spec
 
+      # ── Optional: Code signing ─────────────────────────────────────────
+      # To enable signing, add CODE_SIGN_PFX (Base64 PFX) and
+      # CODE_SIGN_PASSWORD as repository secrets.
+      # See build/README_SIGNING.md for full instructions.
+      #
+      # - name: Sign EXE
+      #   if: env.CODE_SIGN_PFX != ''
+      #   env:
+      #     CODE_SIGN_PFX: ${{ secrets.CODE_SIGN_PFX }}
+      #     CODE_SIGN_PASSWORD: ${{ secrets.CODE_SIGN_PASSWORD }}
+      #   run: |
+      #     echo "$env:CODE_SIGN_PFX" | certutil -decode - sign.pfx
+      #     signtool sign /f sign.pfx /p "$env:CODE_SIGN_PASSWORD" `
+      #       /tr http://timestamp.digicert.com /td sha256 /fd sha256 `
+      #       dist\AURA\AURA.exe
+      #   shell: pwsh
+
+      # ── Build Inno Setup installer (optional) ─────────────────────────
+      # Inno Setup 6 must be pre-installed on the runner OR downloaded
+      # during the workflow.  Uncomment when you want to produce an .exe
+      # installer in addition to the raw folder bundle.
+      #
+      # - name: Install Inno Setup 6
+      #   run: choco install innosetup --no-progress -y
+      #
+      # - name: Build installer
+      #   run: iscc build\installer.iss
+      #
+      # - name: Upload installer artifact
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: AURA-Installer
+      #     path: build\AURA-Setup-*.exe
+      #     retention-days: 30
+
       - name: Package distribution folder
         run: Compress-Archive -Path dist/AURA/* -DestinationPath AURA-Windows.zip
         shell: pwsh
@@ -58,9 +93,20 @@ jobs:
           body: |
             ## AURA – AI Voice Assistant for Gamers
 
+            ### What's new
+            - AI reasoning pipeline (IntentEngine + ContextEngine + TaskPlanner)
+            - Wake word detection — say "AURA" to activate
+            - Human-like voice with VoiceNaturalizer
+            - Full OBS + Twitch + Discord streaming automation
+
             ### Installation
             1. Download and extract **AURA-Windows.zip**
             2. Edit `AURA/config.json` with your OBS / Twitch credentials and game paths
             3. Run **AURA.exe**
 
+            > **SmartScreen warning:** If Windows shows "Windows protected your PC",
+            > click **More info → Run anyway**.  This is expected for unsigned open-source
+            > builds.  See [build/README_SIGNING.md](build/README_SIGNING.md) for details.
+
             No Python installation required.
+
