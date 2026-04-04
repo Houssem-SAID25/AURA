@@ -40,6 +40,8 @@ from __future__ import annotations
 import logging
 from typing import Any, Optional
 
+from core.i18n import t
+
 logger = logging.getLogger(__name__)
 
 # Minimum intent confidence to use the AI pipeline instead of falling back.
@@ -110,7 +112,7 @@ class DecisionEngine:
             Human-readable voice response.
         """
         if not text or not text.strip():
-            return "I didn't catch that — could you repeat?"
+            return t("responses.not_caught")
 
         # ── 1. Intent analysis ────────────────────────────────────────────
         intent_engine = self._get_intent_engine()

@@ -18,14 +18,9 @@ from integrations.obs_controller import OBSController
 from integrations.twitch_api import TwitchAPI
 from integrations.game_launcher import GameLauncher
 from integrations.discord_bot import DiscordNotifier
+from core.i18n import t
 
 logger = logging.getLogger(__name__)
-
-# Help text shown when the user says "help"
-HELP_TEXT = (
-    "I can start or stop your stream, switch OBS scenes, launch games, "
-    "open Twitch, show trending games, or suggest a game for you."
-)
 
 
 class ActionHandler:
@@ -86,13 +81,13 @@ class ActionHandler:
 
         if handler is None:
             logger.warning("No handler for command type: '%s'", cmd_type)
-            return f"I don't know how to handle the command: {cmd_type}."
+            return t("responses.unknown_command", cmd_type=cmd_type)
 
         try:
             return handler(command)
         except Exception as exc:  # pylint: disable=broad-except
             logger.error("Error executing '%s': %s", cmd_type, exc, exc_info=True)
-            return f"Something went wrong while executing {cmd_type}. Please check the logs."
+            return t("responses.exec_failed", cmd_type=cmd_type)
 
     def _execute_action_list(self, command: dict, actions: list[str]) -> str:
         """
@@ -120,7 +115,7 @@ class ActionHandler:
                 logger.error(
                     "Error executing action '%s': %s", action_name, exc, exc_info=True
                 )
-        return " ".join(responses) if responses else "No actions were executed."
+        return " ".join(responses) if responses else t("responses.no_actions")
 
     # ------------------------------------------------------------------
     # Command handlers
@@ -131,33 +126,33 @@ class ActionHandler:
         success, message = self._obs.start_streaming()
         if success:
             self._discord.announce_stream_live()
-            return "Stream started! You are now live."
-        return f"Could not start stream: {message}"
+            return t("responses.stream_started")
+        return t("responses.stream_start_failed", message=message)
 
     def _handle_stop_stream(self, command: dict) -> str:  # noqa: ARG002
         logger.info("Executing: stop stream")
         success, message = self._obs.stop_streaming()
         if success:
             self._discord.announce_stream_offline()
-            return "Stream stopped. You are now offline."
-        return f"Could not stop stream: {message}"
+            return t("responses.stream_stopped")
+        return t("responses.stream_stop_failed", message=message)
 
     def _handle_switch_scene(self, command: dict) -> str:
         scene_name: str = command.get("scene", "")
         if not scene_name:
-            return "Please specify a scene name, for example: switch scene to gameplay."
+            return t("responses.scene_missing")
         logger.info("Executing: switch scene to '%s'", scene_name)
         success, message = self._obs.switch_scene(scene_name)
         if success:
-            return f"Switched to scene: {scene_name}."
-        return f"Could not switch scene: {message}"
+            return t("responses.scene_switched", scene_name=scene_name)
+        return t("responses.scene_switch_failed", message=message)
 
     def _handle_launch_obs(self, command: dict) -> str:  # noqa: ARG002
         logger.info("Executing: launch OBS")
         success, message = self._launcher.launch_obs()
         if success:
-            return "OBS Studio is launching."
-        return f"Could not launch OBS: {message}"
+            return t("responses.obs_launching")
+        return t("responses.obs_launch_failed", message=message)
 
     def _handle_open_twitch(self, command: dict) -> str:  # noqa: ARG002
         logger.info("Executing: open Twitch")
@@ -168,64 +163,61 @@ class ActionHandler:
             url = f"{url}/{channel}"
         try:
             webbrowser.open(url)
-            return f"Opening Twitch at {url}."
+            return t("responses.twitch_opening", url=url)
         except Exception as exc:  # pylint: disable=broad-except
             logger.error("Could not open browser: %s", exc)
-            return "Could not open Twitch in the browser."
+            return t("responses.twitch_open_failed")
 
     def _handle_launch_game(self, command: dict) -> str:
         game_name: str = command.get("game", "")
         if not game_name:
-            return "Please tell me which game you want to play."
+            return t("responses.game_missing")
         logger.info("Executing: launch game '%s'", game_name)
         success, message = self._launcher.launch_game(game_name)
         if success:
-            return f"Launching {game_name}. Have fun streaming!"
-        return f"Could not launch {game_name}: {message}"
+            return t("responses.game_launching", game_name=game_name)
+        return t("responses.game_launch_failed", game_name=game_name, message=message)
 
     def _handle_trending_games(self, command: dict) -> str:  # noqa: ARG002
         logger.info("Executing: fetch trending games")
         games = self._twitch.get_top_games(limit=5)
         if not games:
-            return "Could not fetch trending games right now."
+            return t("responses.trending_failed")
         names = ", ".join(g["name"] for g in games)
         logger.info("Top 5 trending games: %s", names)
-        return f"The top 5 trending games on Twitch are: {names}."
+        return t("responses.trending_list", names=names)
 
     def _handle_suggest_game(self, command: dict) -> str:  # noqa: ARG002
         logger.info("Executing: suggest game")
         suggestion = self._twitch.suggest_game()
         if not suggestion:
-            return "I couldn't find a game suggestion right now."
-        return (
-            f"Based on current trends, you might want to try streaming "
-            f"{suggestion}. It has good viewership but isn't overly saturated."
-        )
+            return t("responses.suggest_failed")
+        return t("responses.suggest_game", game=suggestion)
 
     def _handle_help(self, command: dict) -> str:  # noqa: ARG002
-        return HELP_TEXT
+        return t("responses.help")
 
     def _handle_mute_mic(self, command: dict) -> str:  # noqa: ARG002
         logger.info("Executing: mute microphone")
         success, message = self._obs.mute_microphone()
         if success:
-            return "Microphone muted."
-        return f"Could not mute microphone: {message}"
+            return t("responses.mic_muted")
+        return t("responses.mic_mute_failed", message=message)
 
     def _handle_unmute_mic(self, command: dict) -> str:  # noqa: ARG002
         logger.info("Executing: unmute microphone")
         success, message = self._obs.unmute_microphone()
         if success:
-            return "Microphone unmuted."
-        return f"Could not unmute microphone: {message}"
+            return t("responses.mic_unmuted")
+        return t("responses.mic_unmute_failed", message=message)
 
     def _handle_trigger_overlay(self, command: dict) -> str:
         source_name: str = command.get("source", "")
         duration_ms: int = int(command.get("duration_ms", 3000))
         if not source_name:
-            return "Please specify an overlay source name."
+            return t("responses.overlay_missing")
         logger.info("Executing: trigger overlay '%s' for %d ms", source_name, duration_ms)
         success, message = self._obs.trigger_overlay(source_name, duration_ms)
         if success:
-            return f"Overlay '{source_name}' triggered."
-        return f"Could not trigger overlay: {message}"
+            return t("responses.overlay_triggered", source_name=source_name)
+        return t("responses.overlay_failed", message=message)

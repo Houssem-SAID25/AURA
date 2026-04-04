@@ -84,8 +84,12 @@ def build_profile(
     twitch_refresh_token: str = "",
     twitch_user_id: str = "",
     twitch_login: str = "",
+    youtube_channel: str = "",
     discord_bot_token: str = "",
     discord_channel_id: str = "",
+    obs_host: str = "localhost",
+    obs_port: int = 4455,
+    obs_password: str = "",
     obs_auto_detected_port: Optional[int] = None,
     detected_apps: Optional[dict[str, Any]] = None,
     stream_config: Optional[dict[str, Any]] = None,
@@ -101,13 +105,21 @@ def build_profile(
     twitch:
         Twitch channel URL or plain username (optional).
     other_links:
-        Miscellaneous links (YouTube, etc.) — optional.
+        Miscellaneous links — optional (kept for backwards compatibility).
     streamer_name:
         Display name shown on-stream.  Falls back to *username* if empty.
     twitch_access_token / twitch_refresh_token / twitch_user_id / twitch_login:
         OAuth credentials obtained during Twitch setup step.
+    youtube_channel:
+        YouTube channel URL (optional).
     discord_bot_token / discord_channel_id:
         Discord credentials obtained during Discord setup step.
+    obs_host:
+        OBS WebSocket host (default ``"localhost"``).
+    obs_port:
+        OBS WebSocket port (default ``4455``).
+    obs_password:
+        OBS WebSocket password (optional).
     obs_auto_detected_port:
         OBS WebSocket port found during auto-detection (``None`` if not found).
     detected_apps:
@@ -117,6 +129,7 @@ def build_profile(
         Stream configuration dict with keys ``platform``, ``resolution``,
         ``default_scene``.
     """
+    effective_obs_port = obs_port if obs_port else (obs_auto_detected_port or 4455)
     return {
         "language": language,
         "username": username.strip(),
@@ -126,8 +139,12 @@ def build_profile(
         "twitch_refresh_token": twitch_refresh_token,
         "twitch_user_id": twitch_user_id,
         "twitch_login": twitch_login,
+        "youtube_channel": youtube_channel.strip(),
         "discord_bot_token": discord_bot_token,
         "discord_channel_id": discord_channel_id,
+        "obs_host": obs_host.strip() or "localhost",
+        "obs_port": effective_obs_port,
+        "obs_password": obs_password,
         "obs_auto_detected_port": obs_auto_detected_port,
         "other_links": other_links.strip(),
         "detected_apps": detected_apps or {},
