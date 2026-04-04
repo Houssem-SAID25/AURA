@@ -4,6 +4,10 @@ AURA is a desktop AI voice assistant built for gamers and streamers. It listens
 for voice commands, understands natural language, and automates your streaming
 setup — launching OBS, opening Twitch, starting games, and more.
 
+The desktop interface is styled after a sci-fi HUD (think **Jarvis from Iron Man**
+or the **Batcave AI**) — dark background, electric-cyan neon accents, animated
+pulse rings, and live audio visualisation bars.
+
 ---
 
 ## Features
@@ -16,8 +20,23 @@ setup — launching OBS, opening Twitch, starting games, and more.
 | 📺 OBS control | Start/stop stream, switch scenes via OBS WebSocket API v5 |
 | 🎮 Game launcher | Launch games by voice; paths configured in `config.json` |
 | 🟣 Twitch integration | Fetch trending games, get smart game suggestions |
+| 🖥️ HUD desktop GUI | Jarvis-style animated interface (customtkinter + Canvas) |
+| 📦 Windows EXE | Single-folder installer built with PyInstaller |
 | 🔁 Continuous loop | Runs indefinitely, listening for new commands |
 | 📝 Logging | File + console logging with configurable level |
+
+---
+
+## Download (Windows EXE)
+
+> The latest pre-built Windows installer is attached to every
+> [GitHub Release](../../releases/latest).
+
+1. Download **AURA-Windows.zip** from the Releases page.
+2. Extract the zip to any folder (e.g. `C:\AURA`).
+3. Edit **`AURA/config.json`** with your credentials and game paths (see
+   [Configure AURA](#2-configure-aura) below).
+4. Double-click **`AURA.exe`** — no Python installation required.
 
 ---
 
@@ -25,9 +44,16 @@ setup — launching OBS, opening Twitch, starting games, and more.
 
 ```
 AURA/
-├── main.py                   # Entry point – starts the listening loop
+├── gui_main.py               # GUI entry point – opens the HUD desktop app
+├── main.py                   # CLI entry point – headless voice loop
 ├── config.json               # Configuration (paths, credentials, voice settings)
 ├── requirements.txt          # Python dependencies
+├── aura.spec                 # PyInstaller build specification
+├── gui/
+│   ├── __init__.py
+│   └── app.py                # AuraApp GUI (customtkinter + animated Canvas HUD)
+├── assets/
+│   └── make_icon.py          # Generates aura.ico for the EXE
 ├── voice/
 │   ├── speech_to_text.py     # Whisper-based STT with Google fallback
 │   └── text_to_speech.py     # pyttsx3 TTS engine wrapper
@@ -48,7 +74,7 @@ AURA/
 
 ---
 
-## Quick Start
+## Quick Start (from source)
 
 ### 1. Install dependencies
 
@@ -94,11 +120,37 @@ Edit `config.json` to set your paths and credentials:
 In OBS Studio: **Tools → WebSocket Server Settings** → enable the server and
 set the password to match `config.json`.
 
-### 4. Run AURA
+### 4. Launch AURA
 
+**Desktop GUI (recommended):**
+```bash
+python gui_main.py
+```
+
+**Headless CLI mode:**
 ```bash
 python main.py
 ```
+
+---
+
+## Building the Windows EXE
+
+The EXE is automatically built and attached to every GitHub Release via the
+[`build-exe.yml`](.github/workflows/build-exe.yml) workflow. To build locally:
+
+```bash
+# 1. Install build tools
+pip install pyinstaller pillow
+
+# 2. Generate the app icon
+python assets/make_icon.py
+
+# 3. Build (output: dist/AURA/AURA.exe)
+pyinstaller aura.spec
+```
+
+The resulting `dist/AURA/` folder is self-contained — zip it and share.
 
 ---
 
