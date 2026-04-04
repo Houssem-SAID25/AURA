@@ -12,22 +12,27 @@ points simply call :func:`create_session` and receive a ready-to-use
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass
 class AssistantSession:
-    """Container for the four objects that together form a voice assistant."""
+    """Container for the objects that together form a voice assistant."""
 
-    stt: object   # SpeechToText
-    tts: object   # TextToSpeech
-    parser: object   # CommandParser
-    handler: object  # ActionHandler
+    stt: object           # SpeechToText
+    tts: object           # TextToSpeech
+    parser: object        # CommandParser
+    handler: object       # ActionHandler
+    events: Optional[object] = field(default=None)  # EventsManager (optional)
 
 
-def create_session(config: dict) -> AssistantSession:
+def create_session(
+    config: dict,
+    profile: Optional[dict] = None,
+) -> AssistantSession:
     """
     Instantiate and return a fully-configured :class:`AssistantSession`.
 
@@ -36,11 +41,15 @@ def create_session(config: dict) -> AssistantSession:
     config:
         Validated application config dict (from
         :func:`utils.config_loader.validate_config`).
+    profile:
+        User profile dict (from ``config/user_profile.json``).  When
+        provided, the :class:`~streaming.events_manager.EventsManager` is
+        initialised and attached to the session.  Pass ``None`` to skip.
 
     Returns
     -------
     AssistantSession
-        Ready-to-use session containing STT, TTS, parser, and handler.
+        Ready-to-use session.
 
     Raises
     ------
@@ -58,5 +67,18 @@ def create_session(config: dict) -> AssistantSession:
     tts = TextToSpeech(config)
     parser = CommandParser(config)
     handler = ActionHandler(config)
+
+    events = None
+    if profile is not None:
+        try:
+            from streaming.events_manager import EventsManager  # noqa: PLC0415
+            from integrations.obs_controller import OBSController  # noqa: PLC0415
+
+            obs = handler._obs  # reuse the already-created OBS instance
+            events = EventsManager(config, profile, tts, obs)
+            logger.info("EventsManager attached to session.")
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.warning("Could not initialise EventsManager: %s", exc)
+
     logger.info("AURA assistant session ready.")
-    return AssistantSession(stt=stt, tts=tts, parser=parser, handler=handler)
+    return AssistantSession(stt=stt, tts=tts, parser=parser, handler=handler, events=events)

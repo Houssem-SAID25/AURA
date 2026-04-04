@@ -106,22 +106,27 @@ def main() -> None:
     from core.onboarding.onboarding_storage import profile_exists, load_profile  # noqa: PLC0415
     from core.i18n import set_language  # noqa: PLC0415
 
+    profile: dict = {}
     if not profile_exists():
         logger.info("No user profile found — starting CLI onboarding wizard.")
         if not _run_cli_onboarding():
             logger.warning("Onboarding cancelled. Exiting.")
             sys.exit(0)
-    else:
-        profile = load_profile()
-        set_language(profile.get("language", "en"))
+    profile = load_profile()
+    set_language(profile.get("language", "en"))
 
     logger.info("Starting AURA AI Voice Assistant…")
 
-    session = create_session(config)
+    session = create_session(config, profile=profile)
     stt = session.stt
     tts = session.tts
     parser = session.parser
     handler = session.handler
+
+    # Start event polling (Twitch raids, follows, subs, cheers)
+    if session.events is not None:
+        session.events.start()
+        logger.info("Twitch event polling started.")
 
     tts.speak("AURA is online. Ready to help you stream!")
     logger.info("AURA is ready. Listening for commands.")
@@ -151,6 +156,8 @@ def main() -> None:
 
         except KeyboardInterrupt:
             logger.info("Shutdown requested by user.")
+            if session.events is not None:
+                session.events.stop()
             tts.speak("Goodbye! AURA shutting down.")
             break
         except Exception as exc:  # pylint: disable=broad-except
