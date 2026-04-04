@@ -28,20 +28,39 @@ _DEFAULTS: dict[str, Any] = {
         "port": 4455,
         "password": "",
         "path": "",
+        "mic_input_name": "Mic/Aux",
     },
     "twitch": {
         "client_id": "",
         "client_secret": "",
         "channel": "",
         "browser_url": "https://www.twitch.tv",
+        "access_token": "",
+        "refresh_token": "",
+    },
+    "discord": {
+        "bot_token": "",
+        "channel_id": "",
+        "announce_stream": False,
+    },
+    "alerts": {
+        "raid": {"tts": True, "overlay": False, "overlay_source": ""},
+        "follow": {"tts": True, "overlay": False, "overlay_source": ""},
+        "subscribe": {"tts": True, "overlay": False, "overlay_source": ""},
+        "cheer": {"tts": True, "overlay": False, "overlay_source": ""},
     },
     "games": {},
     "voice": {
         "whisper_model": "base",
         "tts_rate": 175,
         "tts_volume": 1.0,
+        "tts_backend": "pyttsx3",
         "listen_timeout": 5,
         "phrase_time_limit": 10,
+        "naturalizer": {
+            "enabled": True,
+            "hesitation_rate": 0.15,
+        },
     },
     "logging": {
         "level": "INFO",
@@ -96,6 +115,21 @@ def load_config(path: str = "config.json") -> dict:
         return {}
 
 
+def _deep_merge(base: dict, override: dict) -> dict:
+    """Return a new dict that deep-merges *override* on top of *base*.
+
+    Nested dicts are merged recursively; all other values from *override*
+    take precedence over *base*.
+    """
+    result = dict(base)
+    for key, value in override.items():
+        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            result[key] = _deep_merge(result[key], value)
+        else:
+            result[key] = value
+    return result
+
+
 def validate_config(config: dict) -> dict:
     """
     Validate the configuration dict against expected keys and fill defaults.
@@ -125,7 +159,7 @@ def validate_config(config: dict) -> dict:
                 "Config section '%s' is not a dict; using defaults.", section
             )
             user_section = {}
-        merged = {**defaults, **user_section}
+        merged = _deep_merge(defaults, user_section)
         # Warn about keys that still hold the empty placeholder value
         for key, default_val in defaults.items():
             value = merged.get(key)
