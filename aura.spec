@@ -32,6 +32,13 @@ may need to click "More info → Run anyway" on first launch.
 """
 
 import os
+import sys
+
+# SPECPATH is injected by PyInstaller into the spec's execution namespace;
+# it points to the directory containing this spec file (the project root).
+# We add it to sys.path so that `version.py` (and other local modules) can
+# be imported even when PyInstaller exec()s the spec from a different cwd.
+sys.path.insert(0, SPECPATH)  # noqa: F821 – SPECPATH is set by PyInstaller
 
 from version import __version__  # noqa: E402
 
