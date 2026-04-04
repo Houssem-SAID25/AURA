@@ -58,6 +58,11 @@ class ActionHandler:
     # Public API
     # ------------------------------------------------------------------
 
+    @property
+    def obs(self) -> OBSController:
+        """Return the shared OBSController instance."""
+        return self._obs
+
     def execute(self, command: dict, raw_text: str = "") -> str:
         """
         Execute a command dict and return a spoken response.

@@ -37,12 +37,12 @@ def _run_cli_onboarding() -> bool:
 
     # Step 1 – Language
     print("\nChoose language / Choisissez votre langue:")
-    print("  [1] Francais (defaut)")
+    print("  [1] Français (défaut)")
     print("  [2] English")
     lang_choice = input("Choice / Choix [1]: ").strip()
     lang = "en" if lang_choice == "2" else "fr"
     set_language(lang)
-    print(f"\nLanguage set to: {'Francais' if lang == 'fr' else 'English'}")
+    print(f"\nLanguage set to: {'Français' if lang == 'fr' else 'English'}")
 
     # Step 2 – Username
     print()
@@ -125,7 +125,7 @@ def _run_cli_onboarding() -> bool:
     # Confirm
     none_str = t("onboarding.confirm_none")
     print("\n" + "-" * 60)
-    print(f"  {t('onboarding.confirm_language')}: {'Francais' if lang == 'fr' else 'English'}")
+    print(f"  {t('onboarding.confirm_language')}: {'Français' if lang == 'fr' else 'English'}")
     print(f"  {t('onboarding.confirm_username')}: {username}")
     print(f"  {t('onboarding.confirm_twitch')}:   {twitch or none_str}")
     print(f"  Twitch OAuth:  {'configured' if twitch_access_token else none_str}")

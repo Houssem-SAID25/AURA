@@ -20,6 +20,7 @@ from __future__ import annotations
 import logging
 import subprocess
 import os
+import threading
 import time
 from typing import Optional
 
@@ -281,7 +282,6 @@ class OBSController:
                 except Exception as hide_exc:  # pylint: disable=broad-except
                     logger.warning("Could not hide overlay '%s': %s", source_name, hide_exc)
 
-            import threading  # noqa: PLC0415
             threading.Thread(target=_hide, daemon=True, name="AURA-OverlayHide").start()
             return True, ""
         except Exception as exc:  # pylint: disable=broad-except

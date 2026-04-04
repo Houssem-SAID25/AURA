@@ -74,7 +74,7 @@ def create_session(
             from streaming.events_manager import EventsManager  # noqa: PLC0415
             from integrations.obs_controller import OBSController  # noqa: PLC0415
 
-            obs = handler._obs  # reuse the already-created OBS instance
+            obs = handler.obs  # reuse the already-created OBS instance
             events = EventsManager(config, profile, tts, obs)
             logger.info("EventsManager attached to session.")
         except Exception as exc:  # pylint: disable=broad-except
