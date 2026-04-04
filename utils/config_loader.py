@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +22,7 @@ _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Keys that AURA expects and their default values.
 # A missing key triggers a WARNING so users know what to configure.
-_DEFAULTS: dict = {
+_DEFAULTS: dict[str, Any] = {
     "obs": {
         "host": "localhost",
         "port": 4455,
