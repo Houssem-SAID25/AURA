@@ -79,6 +79,7 @@ def build_profile(
     twitch: str = "",
     other_links: str = "",
     *,
+    streamer_name: str = "",
     twitch_access_token: str = "",
     twitch_refresh_token: str = "",
     twitch_user_id: str = "",
@@ -86,11 +87,40 @@ def build_profile(
     discord_bot_token: str = "",
     discord_channel_id: str = "",
     obs_auto_detected_port: Optional[int] = None,
+    detected_apps: Optional[dict[str, Any]] = None,
+    stream_config: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
-    """Construct the profile dict from wizard inputs."""
+    """Construct the profile dict from wizard inputs.
+
+    Parameters
+    ----------
+    language:
+        Locale code (``"en"`` or ``"fr"``).
+    username:
+        Nickname AURA uses to address the user.
+    twitch:
+        Twitch channel URL or plain username (optional).
+    other_links:
+        Miscellaneous links (YouTube, etc.) — optional.
+    streamer_name:
+        Display name shown on-stream.  Falls back to *username* if empty.
+    twitch_access_token / twitch_refresh_token / twitch_user_id / twitch_login:
+        OAuth credentials obtained during Twitch setup step.
+    discord_bot_token / discord_channel_id:
+        Discord credentials obtained during Discord setup step.
+    obs_auto_detected_port:
+        OBS WebSocket port found during auto-detection (``None`` if not found).
+    detected_apps:
+        Structured result from the app-detection step
+        (see :func:`onboarding.steps.app_detection.detect_installed_apps`).
+    stream_config:
+        Stream configuration dict with keys ``platform``, ``resolution``,
+        ``default_scene``.
+    """
     return {
         "language": language,
         "username": username.strip(),
+        "streamer_name": (streamer_name.strip() or username.strip()),
         "twitch": _normalise_twitch(twitch),
         "twitch_access_token": twitch_access_token,
         "twitch_refresh_token": twitch_refresh_token,
@@ -100,6 +130,8 @@ def build_profile(
         "discord_channel_id": discord_channel_id,
         "obs_auto_detected_port": obs_auto_detected_port,
         "other_links": other_links.strip(),
+        "detected_apps": detected_apps or {},
+        "stream_config": stream_config or {},
         "created_at": datetime.now(timezone.utc).isoformat(),
         "settings": {
             "voice_speed": 1.0,

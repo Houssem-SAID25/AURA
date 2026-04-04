@@ -5,8 +5,8 @@ Entry point: starts the assistant and runs the continuous listening loop.
 
 First-launch flow
 -----------------
-If ``config/user_profile.json`` does not exist a CLI onboarding wizard is
-shown in the terminal before the voice loop starts.
+If ``config/user_profile.json`` does not exist the :class:`OnboardingManager`
+runs the 8-step CLI wizard before the voice loop starts.
 """
 
 import logging
@@ -18,11 +18,17 @@ from core.session import create_session
 
 
 def _run_cli_onboarding() -> bool:
-    """Run a terminal-based onboarding wizard.
+    """Run a terminal-based onboarding wizard (delegates to OnboardingManager).
 
     Returns ``True`` if the wizard completed successfully, ``False`` if the
     user aborted or a save error occurred.
     """
+    from onboarding import OnboardingManager  # noqa: PLC0415
+    return OnboardingManager().run()
+
+
+def _run_cli_onboarding_legacy() -> bool:
+    """Legacy inline wizard kept for reference; not called by main()."""
     from core.i18n import set_language, t  # noqa: PLC0415
     from core.onboarding.onboarding_storage import (  # noqa: PLC0415
         build_profile,
