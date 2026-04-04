@@ -465,8 +465,20 @@ class OnboardingWindow(ctk.CTkToplevel):
         self._on_complete(profile)
 
     def _on_close(self) -> None:
-        """Prevent closing the wizard without completing it."""
-        logger.debug("Onboarding window close request ignored.")
+        """Allow users to exit the wizard and quit the application."""
+        import tkinter.messagebox as mb  # noqa: PLC0415
+        if mb.askyesno(
+            "AURA – Exit",
+            "Are you sure you want to exit without completing setup?",
+            parent=self,
+        ):
+            logger.info("Onboarding cancelled by user — exiting.")
+            # Destroy the wizard and its master so mainloop() ends cleanly
+            self.destroy()
+            try:
+                self.master.destroy()
+            except Exception:  # pylint: disable=broad-except
+                pass
 
 
 class OnboardingRoot(ctk.CTk):

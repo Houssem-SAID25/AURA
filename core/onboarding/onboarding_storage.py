@@ -95,7 +95,7 @@ def validate_twitch(value: str) -> bool:
 
     Accepts:
     - Empty string (field is optional)
-    - Plain alphanumeric username (letters, digits, underscores, 4-25 chars)
+    - Plain alphanumeric username (letters, digits, underscores, 1-25 chars)
     - ``https://twitch.tv/<username>`` or ``https://www.twitch.tv/<username>``
     - ``http://`` variants of the above
     """
