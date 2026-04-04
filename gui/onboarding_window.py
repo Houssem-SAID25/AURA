@@ -10,9 +10,8 @@ Flow
 ----
   Step 0 – Language selection (FR / EN)
   Step 1 – Username / nickname
-  Step 2 – Twitch channel (optional)
+  Step 2 – Account linking (Twitch, YouTube, OBS, Discord)
   Step 3 – Confirmation summary
-  Step 4 – Done / launch
 
 The wizard calls ``on_complete(profile)`` when the user confirms so that
 the caller can save the profile and proceed to the main application.
@@ -21,6 +20,7 @@ the caller can save the profile and proceed to the main application.
 from __future__ import annotations
 
 import logging
+import re
 import tkinter as tk
 from typing import Callable
 
@@ -48,8 +48,36 @@ TEXT_BRIGHT = "#d0eeff"
 TEXT_DIM   = "#3a6080"
 BORDER     = "#1a3050"
 
-STEP_NAMES = ["step_language", "step_username", "step_twitch", "step_confirm"]
+STEP_NAMES = ["step_language", "step_username", "step_accounts", "step_confirm"]
 TOTAL_STEPS = len(STEP_NAMES)
+
+_YOUTUBE_PATTERN = re.compile(
+    r"^https?://(www\.)?(youtube\.com|youtu\.be)/", re.IGNORECASE
+)
+
+# Characters used to mask sensitive tokens in the confirmation summary
+_TOKEN_MASK_CHAR = "●"
+_TOKEN_MASK_LENGTH = 8
+
+
+def _validate_youtube(value: str) -> bool:
+    """Return True if value is a valid YouTube URL or empty."""
+    value = value.strip()
+    if not value:
+        return True
+    return bool(_YOUTUBE_PATTERN.match(value))
+
+
+def _validate_obs_port(value: str) -> bool:
+    """Return True if value is a valid port number (1-65535) or empty."""
+    value = value.strip()
+    if not value:
+        return True
+    try:
+        port = int(value)
+        return 1 <= port <= 65535
+    except ValueError:
+        return False
 
 
 class OnboardingWindow(ctk.CTkToplevel):
@@ -76,16 +104,22 @@ class OnboardingWindow(ctk.CTkToplevel):
 
         # Wizard data collected across steps
         self._lang = "fr"          # default to French per spec
-        self._username_var = ctk.StringVar()
-        self._twitch_var   = ctk.StringVar()
-        self._other_var    = ctk.StringVar()
+        self._username_var      = ctk.StringVar()
+        self._twitch_var        = ctk.StringVar()
+        self._youtube_var       = ctk.StringVar()
+        self._obs_host_var      = ctk.StringVar(value="localhost")
+        self._obs_port_var      = ctk.StringVar(value="4455")
+        self._obs_password_var  = ctk.StringVar()
+        self._discord_token_var = ctk.StringVar()
+        self._discord_chan_var  = ctk.StringVar()
 
         # Apply language chosen at start
         set_language(self._lang)
 
         self.title("AURA – Setup")
-        self.geometry("560x520")
-        self.resizable(False, False)
+        self.geometry("600x640")
+        self.minsize(560, 580)
+        self.resizable(True, False)
         self.configure(fg_color=BG_DEEP)
 
         # Make this window modal
@@ -198,7 +232,7 @@ class OnboardingWindow(ctk.CTkToplevel):
         renderers = [
             self._render_language_step,
             self._render_username_step,
-            self._render_twitch_step,
+            self._render_accounts_step,
             self._render_confirm_step,
         ]
         if self._step < len(renderers):
@@ -305,62 +339,201 @@ class OnboardingWindow(ctk.CTkToplevel):
         )
         self._username_error.pack(pady=(4, 0))
 
-    def _render_twitch_step(self) -> None:
+    def _render_accounts_step(self) -> None:
+        """Render the accounts/services linking step inside a scrollable frame."""
         frame = self._content_frame
 
         ctk.CTkLabel(
             frame,
-            text=t("onboarding.twitch_title"),
+            text=t("onboarding.accounts_title"),
             font=("Consolas", 18, "bold"),
             text_color=NEON_CYAN,
-        ).pack(pady=(32, 8))
+        ).pack(pady=(12, 2))
 
         ctk.CTkLabel(
             frame,
-            text=t("onboarding.twitch_label"),
-            font=("Consolas", 12),
+            text=t("onboarding.accounts_subtitle"),
+            font=("Consolas", 11),
             text_color=TEXT_DIM,
         ).pack(pady=(0, 8))
 
-        twitch_entry = ctk.CTkEntry(
+        # Scrollable area for all service fields
+        scroll = ctk.CTkScrollableFrame(
             frame,
+            fg_color=BG_DEEP,
+            scrollbar_button_color=BORDER,
+            scrollbar_button_hover_color=NEON_BLUE,
+        )
+        scroll.pack(fill="both", expand=True, pady=(0, 4))
+
+        # ── Twitch ──────────────────────────────────────────────────────
+        self._add_section_header(scroll, t("onboarding.twitch_section"), "🟣")
+        self._twitch_entry = ctk.CTkEntry(
+            scroll,
             textvariable=self._twitch_var,
             placeholder_text=t("onboarding.twitch_placeholder"),
-            width=360,
-            height=44,
-            font=("Consolas", 13),
+            height=38,
+            font=("Consolas", 12),
             fg_color=BG_PANEL,
             border_color=NEON_BLUE,
             text_color=TEXT_BRIGHT,
         )
-        twitch_entry.pack(pady=8)
-
+        self._twitch_entry.pack(fill="x", padx=8, pady=(0, 2))
         self._twitch_error = ctk.CTkLabel(
-            frame,
+            scroll,
             text="",
-            font=("Consolas", 11),
+            font=("Consolas", 10),
             text_color=NEON_RED,
+            anchor="w",
         )
-        self._twitch_error.pack(pady=(4, 0))
+        self._twitch_error.pack(fill="x", padx=8, pady=(0, 6))
 
-        ctk.CTkLabel(
-            frame,
-            text=t("onboarding.other_links_label"),
+        # ── YouTube ─────────────────────────────────────────────────────
+        self._add_section_header(scroll, t("onboarding.youtube_section"), "🔴")
+        self._youtube_entry = ctk.CTkEntry(
+            scroll,
+            textvariable=self._youtube_var,
+            placeholder_text=t("onboarding.youtube_placeholder"),
+            height=38,
             font=("Consolas", 12),
+            fg_color=BG_PANEL,
+            border_color=NEON_BLUE,
+            text_color=TEXT_BRIGHT,
+        )
+        self._youtube_entry.pack(fill="x", padx=8, pady=(0, 2))
+        self._youtube_error = ctk.CTkLabel(
+            scroll,
+            text="",
+            font=("Consolas", 10),
+            text_color=NEON_RED,
+            anchor="w",
+        )
+        self._youtube_error.pack(fill="x", padx=8, pady=(0, 6))
+
+        # ── OBS Studio ──────────────────────────────────────────────────
+        self._add_section_header(scroll, t("onboarding.obs_section"), "⚫")
+        obs_row = ctk.CTkFrame(scroll, fg_color=BG_DEEP)
+        obs_row.pack(fill="x", padx=8, pady=(0, 4))
+        obs_row.columnconfigure(0, weight=3)
+        obs_row.columnconfigure(1, weight=1)
+
+        # Host
+        ctk.CTkLabel(
+            obs_row,
+            text=t("onboarding.obs_host_label"),
+            font=("Consolas", 11),
             text_color=TEXT_DIM,
-        ).pack(pady=(16, 4))
+            anchor="w",
+        ).grid(row=0, column=0, sticky="w", padx=(0, 6), pady=(0, 2))
+        ctk.CTkLabel(
+            obs_row,
+            text=t("onboarding.obs_port_label"),
+            font=("Consolas", 11),
+            text_color=TEXT_DIM,
+            anchor="w",
+        ).grid(row=0, column=1, sticky="w", pady=(0, 2))
 
         ctk.CTkEntry(
-            frame,
-            textvariable=self._other_var,
-            placeholder_text=t("onboarding.other_links_placeholder"),
-            width=360,
-            height=44,
-            font=("Consolas", 13),
+            obs_row,
+            textvariable=self._obs_host_var,
+            placeholder_text=t("onboarding.obs_host_placeholder"),
+            height=36,
+            font=("Consolas", 12),
             fg_color=BG_PANEL,
             border_color=BORDER,
             text_color=TEXT_BRIGHT,
-        ).pack(pady=4)
+        ).grid(row=1, column=0, sticky="ew", padx=(0, 6))
+
+        ctk.CTkEntry(
+            obs_row,
+            textvariable=self._obs_port_var,
+            placeholder_text=t("onboarding.obs_port_placeholder"),
+            height=36,
+            font=("Consolas", 12),
+            fg_color=BG_PANEL,
+            border_color=BORDER,
+            text_color=TEXT_BRIGHT,
+        ).grid(row=1, column=1, sticky="ew")
+
+        self._obs_port_error = ctk.CTkLabel(
+            scroll,
+            text="",
+            font=("Consolas", 10),
+            text_color=NEON_RED,
+            anchor="w",
+        )
+        self._obs_port_error.pack(fill="x", padx=8, pady=(0, 2))
+
+        ctk.CTkLabel(
+            scroll,
+            text=t("onboarding.obs_password_label"),
+            font=("Consolas", 11),
+            text_color=TEXT_DIM,
+            anchor="w",
+        ).pack(fill="x", padx=8)
+        ctk.CTkEntry(
+            scroll,
+            textvariable=self._obs_password_var,
+            placeholder_text=t("onboarding.obs_password_placeholder"),
+            show="●",
+            height=36,
+            font=("Consolas", 12),
+            fg_color=BG_PANEL,
+            border_color=BORDER,
+            text_color=TEXT_BRIGHT,
+        ).pack(fill="x", padx=8, pady=(0, 8))
+
+        # ── Discord ─────────────────────────────────────────────────────
+        self._add_section_header(scroll, t("onboarding.discord_section"), "🔵")
+        ctk.CTkLabel(
+            scroll,
+            text=t("onboarding.discord_token_label"),
+            font=("Consolas", 11),
+            text_color=TEXT_DIM,
+            anchor="w",
+        ).pack(fill="x", padx=8)
+        ctk.CTkEntry(
+            scroll,
+            textvariable=self._discord_token_var,
+            placeholder_text=t("onboarding.discord_token_placeholder"),
+            show="●",
+            height=36,
+            font=("Consolas", 12),
+            fg_color=BG_PANEL,
+            border_color=BORDER,
+            text_color=TEXT_BRIGHT,
+        ).pack(fill="x", padx=8, pady=(0, 6))
+
+        ctk.CTkLabel(
+            scroll,
+            text=t("onboarding.discord_channel_label"),
+            font=("Consolas", 11),
+            text_color=TEXT_DIM,
+            anchor="w",
+        ).pack(fill="x", padx=8)
+        ctk.CTkEntry(
+            scroll,
+            textvariable=self._discord_chan_var,
+            placeholder_text=t("onboarding.discord_channel_placeholder"),
+            height=36,
+            font=("Consolas", 12),
+            fg_color=BG_PANEL,
+            border_color=BORDER,
+            text_color=TEXT_BRIGHT,
+        ).pack(fill="x", padx=8, pady=(0, 10))
+
+    def _add_section_header(self, parent: ctk.CTkScrollableFrame, label: str, icon: str) -> None:
+        """Add a styled section divider inside the scrollable accounts frame."""
+        row = ctk.CTkFrame(parent, fg_color=BG_PANEL, corner_radius=6, height=32)
+        row.pack(fill="x", padx=0, pady=(6, 4))
+        row.pack_propagate(False)
+        ctk.CTkLabel(
+            row,
+            text=f"{icon}  {label}",
+            font=("Consolas", 12, "bold"),
+            text_color=NEON_CYAN,
+            anchor="w",
+        ).pack(side="left", padx=12)
 
     def _render_confirm_step(self) -> None:
         frame = self._content_frame
@@ -370,15 +543,33 @@ class OnboardingWindow(ctk.CTkToplevel):
             text=t("onboarding.confirm_title"),
             font=("Consolas", 18, "bold"),
             text_color=NEON_CYAN,
-        ).pack(pady=(28, 16))
+        ).pack(pady=(20, 12))
 
         none_str = t("onboarding.confirm_none")
         lang_display = "Français" if self._lang == "fr" else "English"
+
+        # Build OBS summary
+        obs_host = self._obs_host_var.get().strip() or "localhost"
+        obs_port = self._obs_port_var.get().strip() or "4455"
+        obs_summary = f"{obs_host}:{obs_port}" if (obs_host or obs_port) else none_str
+
+        # Build Discord summary (mask token)
+        discord_token = self._discord_token_var.get().strip()
+        discord_chan = self._discord_chan_var.get().strip()
+        if discord_token:
+            discord_summary = f"{_TOKEN_MASK_CHAR * _TOKEN_MASK_LENGTH}  ch:{discord_chan or '—'}"
+        elif discord_chan:
+            discord_summary = f"ch:{discord_chan}"
+        else:
+            discord_summary = none_str
+
         rows = [
             (t("onboarding.confirm_language"), lang_display),
             (t("onboarding.confirm_username"),  self._username_var.get() or none_str),
             (t("onboarding.confirm_twitch"),    self._twitch_var.get() or none_str),
-            (t("onboarding.confirm_other"),     self._other_var.get() or none_str),
+            (t("onboarding.confirm_youtube"),   self._youtube_var.get() or none_str),
+            (t("onboarding.confirm_obs"),       obs_summary),
+            (t("onboarding.confirm_discord"),   discord_summary),
         ]
 
         card = ctk.CTkFrame(frame, fg_color=BG_PANEL, corner_radius=10)
@@ -386,21 +577,22 @@ class OnboardingWindow(ctk.CTkToplevel):
 
         for label, value in rows:
             row = ctk.CTkFrame(card, fg_color=BG_PANEL)
-            row.pack(fill="x", padx=16, pady=6)
+            row.pack(fill="x", padx=16, pady=5)
             ctk.CTkLabel(
                 row,
                 text=f"{label}:",
-                font=("Consolas", 12),
+                font=("Consolas", 11),
                 text_color=TEXT_DIM,
-                width=120,
+                width=100,
                 anchor="w",
             ).pack(side="left")
             ctk.CTkLabel(
                 row,
                 text=value,
-                font=("Consolas", 12, "bold"),
+                font=("Consolas", 11, "bold"),
                 text_color=TEXT_BRIGHT,
                 anchor="w",
+                wraplength=330,
             ).pack(side="left", padx=(8, 0))
 
         self._save_error = ctk.CTkLabel(
@@ -409,7 +601,7 @@ class OnboardingWindow(ctk.CTkToplevel):
             font=("Consolas", 11),
             text_color=NEON_RED,
         )
-        self._save_error.pack(pady=(12, 0))
+        self._save_error.pack(pady=(10, 0))
 
     # ── Navigation ────────────────────────────────────────────────────────
 
@@ -445,22 +637,50 @@ class OnboardingWindow(ctk.CTkToplevel):
             self._username_error.configure(text="")
 
         elif self._step == 2:
+            valid = True
             # Twitch URL optional but must be valid if provided
             twitch_val = self._twitch_var.get().strip()
             if twitch_val and not validate_twitch(twitch_val):
                 self._twitch_error.configure(text=t("onboarding.twitch_invalid"))
-                return False
-            self._twitch_error.configure(text="")
+                valid = False
+            else:
+                self._twitch_error.configure(text="")
+
+            # YouTube URL optional but must be valid if provided
+            youtube_val = self._youtube_var.get().strip()
+            if youtube_val and not _validate_youtube(youtube_val):
+                self._youtube_error.configure(text=t("onboarding.youtube_invalid"))
+                valid = False
+            else:
+                self._youtube_error.configure(text="")
+
+            # OBS port must be valid if provided
+            obs_port_val = self._obs_port_var.get().strip()
+            if not _validate_obs_port(obs_port_val):
+                self._obs_port_error.configure(text=t("onboarding.obs_port_invalid"))
+                valid = False
+            else:
+                self._obs_port_error.configure(text="")
+
+            return valid
 
         return True
 
     def _finish(self) -> None:
         """Build the profile dict and hand off to the caller."""
+        obs_port_str = self._obs_port_var.get().strip()
+        obs_port = int(obs_port_str) if obs_port_str else 4455
+
         profile = build_profile(
             language=self._lang,
             username=self._username_var.get(),
             twitch=self._twitch_var.get(),
-            other_links=self._other_var.get(),
+            youtube_channel=self._youtube_var.get(),
+            obs_host=self._obs_host_var.get().strip() or "localhost",
+            obs_port=obs_port,
+            obs_password=self._obs_password_var.get(),
+            discord_bot_token=self._discord_token_var.get(),
+            discord_channel_id=self._discord_chan_var.get(),
         )
         self._on_complete(profile)
 
