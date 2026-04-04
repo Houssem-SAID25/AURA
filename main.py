@@ -9,10 +9,7 @@ import sys
 
 from utils.config_loader import load_config, validate_config
 from utils.logger import setup_logging
-from voice.speech_to_text import SpeechToText
-from voice.text_to_speech import TextToSpeech
-from core.command_parser import CommandParser
-from core.action_handler import ActionHandler
+from core.session import create_session
 
 
 def main() -> None:
@@ -24,11 +21,11 @@ def main() -> None:
     logger = logging.getLogger("AURA")
     logger.info("Starting AURA AI Voice Assistant…")
 
-    # Initialise modules
-    stt = SpeechToText(config)
-    tts = TextToSpeech(config)
-    parser = CommandParser(config)
-    handler = ActionHandler(config)
+    session = create_session(config)
+    stt = session.stt
+    tts = session.tts
+    parser = session.parser
+    handler = session.handler
 
     tts.speak("AURA is online. Ready to help you stream!")
     logger.info("AURA is ready. Listening for commands.")

@@ -21,6 +21,8 @@ import time
 import customtkinter as ctk
 import tkinter as tk
 
+from version import __version__
+
 logger = logging.getLogger("AURA.GUI")
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -365,7 +367,7 @@ class AuraApp(ctk.CTk):
 
         ctk.CTkLabel(
             hdr,
-            text="v1.0",
+            text=f"v{__version__}",
             font=ctk.CTkFont(family="Consolas", size=9),
             text_color=TEXT_DIM,
         ).grid(row=0, column=2, padx=20, sticky="e")
@@ -579,15 +581,13 @@ class AuraApp(ctk.CTk):
     def _voice_loop(self) -> None:
         """Background thread: run the voice assistant loop."""
         try:
-            from voice.speech_to_text import SpeechToText      # noqa: PLC0415
-            from voice.text_to_speech import TextToSpeech      # noqa: PLC0415
-            from core.command_parser import CommandParser       # noqa: PLC0415
-            from core.action_handler import ActionHandler       # noqa: PLC0415
+            from core.session import create_session  # noqa: PLC0415
 
-            stt     = SpeechToText(self._config)
-            tts     = TextToSpeech(self._config)
-            parser  = CommandParser(self._config)
-            handler = ActionHandler(self._config)
+            session = create_session(self._config)
+            stt = session.stt
+            tts = session.tts
+            parser = session.parser
+            handler = session.handler
         except Exception as exc:  # pylint: disable=broad-except
             self._post("log", f"[ERROR] Initialisation failed: {exc}\n")
             self._post("state", "error")

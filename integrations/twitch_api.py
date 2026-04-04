@@ -27,6 +27,30 @@ logger = logging.getLogger(__name__)
 HELIX_BASE = "https://api.twitch.tv/helix"
 TOKEN_URL = "https://id.twitch.tv/oauth2/token"
 
+# How many times to retry transient HTTP errors before giving up.
+_HTTP_RETRIES = 3
+# HTTP status codes considered transient and worth retrying.
+_RETRY_STATUS = frozenset({429, 500, 502, 503, 504})
+
+
+def _build_session():
+    """Return a ``requests.Session`` configured with a urllib3 Retry adapter."""
+    import requests  # noqa: PLC0415
+    from requests.adapters import HTTPAdapter  # noqa: PLC0415
+    from urllib3.util.retry import Retry  # noqa: PLC0415
+
+    retry = Retry(
+        total=_HTTP_RETRIES,
+        backoff_factor=0.5,
+        status_forcelist=_RETRY_STATUS,
+        allowed_methods={"GET", "POST"},
+        raise_on_status=False,
+    )
+    session = requests.Session()
+    session.mount("https://", HTTPAdapter(max_retries=retry))
+    session.mount("http://", HTTPAdapter(max_retries=retry))
+    return session
+
 
 class TwitchAPI:
     """Thin wrapper around the Twitch Helix API for game-discovery features."""
@@ -37,6 +61,7 @@ class TwitchAPI:
         self._client_secret: str = self._twitch_cfg.get("client_secret", "")
         self._access_token: Optional[str] = None
         self._token_expiry: float = 0.0  # epoch seconds
+        self._session = _build_session()  # reused across all requests
 
     # ------------------------------------------------------------------
     # Authentication
@@ -54,9 +79,7 @@ class TwitchAPI:
             return False
 
         try:
-            import requests  # noqa: PLC0415
-
-            resp = requests.post(
+            resp = self._session.post(
                 TOKEN_URL,
                 params={
                     "client_id": self._client_id,
@@ -98,9 +121,7 @@ class TwitchAPI:
             return []
 
         try:
-            import requests  # noqa: PLC0415
-
-            resp = requests.get(
+            resp = self._session.get(
                 f"{HELIX_BASE}/games/top",
                 headers=self._headers(),
                 params={"first": limit},
@@ -155,9 +176,7 @@ class TwitchAPI:
             return []
 
         try:
-            import requests  # noqa: PLC0415
-
-            resp = requests.get(
+            resp = self._session.get(
                 f"{HELIX_BASE}/streams",
                 headers=self._headers(),
                 params={"game_id": game_id, "first": limit},
