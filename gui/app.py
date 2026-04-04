@@ -583,6 +583,7 @@ class AuraApp(ctk.CTk):
         try:
             from core.session import create_session  # noqa: PLC0415
             from core.onboarding.onboarding_storage import load_profile  # noqa: PLC0415
+            from voice.wake_word import WakeWordDetector  # noqa: PLC0415
 
             profile = load_profile()
             session = create_session(self._config, profile=profile)
@@ -590,6 +591,7 @@ class AuraApp(ctk.CTk):
             tts = session.tts
             parser = session.parser
             handler = session.handler
+            wake_detector = WakeWordDetector(self._config)
 
             if session.events is not None:
                 session.events.start()
@@ -601,6 +603,8 @@ class AuraApp(ctk.CTk):
         self._post("log", "[SYSTEM] AURA initialised. Listening for commands.\n")
         self._post("response", "AURA is online. Ready to help you stream!")
         tts.speak("AURA is online. Ready to help you stream!")
+        if wake_detector.is_enabled:
+            self._post("log", "[SYSTEM] Wake word detection active — say 'AURA'.\n")
 
         while self._running:
             try:
@@ -608,6 +612,14 @@ class AuraApp(ctk.CTk):
                     time.sleep(0.1)
                     continue
 
+                # ── Phase 1: Wake word (low-CPU idle) ────────────────────
+                if wake_detector.is_enabled:
+                    self._post("state", "idle")
+                    if not wake_detector.wait_for_wake_word(timeout=5.0):
+                        continue  # No wake word — keep waiting
+                    self._post("log", "[SYSTEM] Wake word detected!\n")
+
+                # ── Phase 2: Full command recognition ────────────────────
                 self._post("state", "listening")
                 self._post("log", "[AURA] Listening…\n")
                 text = stt.listen()
@@ -619,17 +631,17 @@ class AuraApp(ctk.CTk):
                 self._post("log", f"[HEARD] {text}\n")
                 self._post("state", "processing")
 
-                command = parser.parse(text)
-                if command is None:
-                    msg = "Sorry, I didn't understand that command."
-                    self._post("response", msg)
-                    self._post("log", f"[AURA] {msg}\n")
-                    self._post("state", "speaking")
-                    tts.speak(msg)
-                    continue
+                # ── Phase 3: Parse / AI reasoning ────────────────────────
+                if session.decision_engine is not None:
+                    response = session.decision_engine.process(text)
+                else:
+                    command = parser.parse(text)
+                    if command is None:
+                        response = "Sorry, I didn't understand that command."
+                    else:
+                        self._post("log", f"[COMMAND] {command.get('type', '?')}\n")
+                        response = handler.execute(command, raw_text=text)
 
-                self._post("log", f"[COMMAND] {command.get('type', '?')}\n")
-                response = handler.execute(command, raw_text=text)
                 self._post("response", response)
                 self._post("log", f"[AURA] {response}\n")
                 self._post("state", "speaking")

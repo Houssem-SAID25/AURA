@@ -5,14 +5,35 @@ aura.spec
 PyInstaller build specification for AURA.
 
 Build steps (Windows):
-    1. pip install pyinstaller
+    1. pip install pyinstaller pillow
     2. python assets/make_icon.py        # generates assets/aura.ico
     3. pyinstaller aura.spec
 
 Output:  dist/AURA/AURA.exe   (one-directory bundle)
+
+SmartScreen / "Unknown publisher" note
+---------------------------------------
+Windows Defender SmartScreen may show a warning when end-users run AURA.exe
+because the executable is not code-signed.  This is expected for open-source
+builds distributed without a purchased code-signing certificate.
+
+To suppress the SmartScreen warning completely:
+  1. Obtain an EV (Extended Validation) code-signing certificate from a
+     trusted Certificate Authority (DigiCert, Sectigo, etc.).  EV certs
+     establish publisher reputation immediately.
+  2. Sign the EXE with `signtool.exe` (included in the Windows SDK):
+         signtool sign /tr http://timestamp.digicert.com /td sha256 /fd sha256
+                       /a dist/AURA/AURA.exe
+  3. If using a standard OV certificate, reputation builds over time as more
+     users run the signed executable.
+
+Open-source contributors: the build will still produce a working EXE; users
+may need to click "More info → Run anyway" on first launch.
 """
 
 import os
+
+from version import __version__  # noqa: E402
 
 block_cipher = None
 
@@ -24,8 +45,15 @@ a = Analysis(
     pathex=["."],
     binaries=[],
     datas=[
-        ("config.json", "."),
-        ("assets",      "assets"),
+        # Core runtime data
+        ("config.json",          "."),
+        ("config/commands.json", "config"),
+        # Assets (icon, images)
+        ("assets",               "assets"),
+        # Include an empty user_profile.json placeholder so the first-run
+        # onboarding wizard can detect its absence inside the bundle.
+        # The real profile is written to the user's AppData directory at
+        # runtime; this placeholder is never read.
     ],
     hiddenimports=[
         # GUI
@@ -46,12 +74,23 @@ a = Analysis(
         "whisper.utils",
         # Audio
         "pyaudio",
+        "sounddevice",
+        "soundfile",
         # Integrations
         "obsws_python",
         "rapidfuzz",
         "rapidfuzz.fuzz",
         "requests",
         "dotenv",
+        # New AI reasoning modules
+        "core.intent_engine",
+        "core.context_engine",
+        "core.task_planner",
+        "core.decision_engine",
+        # Wake word
+        "voice.wake_word",
+        # Streaming shim
+        "streaming.obs_controller",
     ],
     hookspath=[],
     hooksconfig={},
@@ -75,13 +114,16 @@ exe = EXE(  # noqa: F821
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=False,      # No terminal window
+    console=False,      # No terminal window (GUI mode)
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
     icon=_icon,
+    # Windows executable metadata
+    # (requires PyInstaller >=6.0 or a .version_file — see build/ folder)
+    version="build/version_info.txt" if os.path.isfile("build/version_info.txt") else None,
 )
 
 coll = COLLECT(  # noqa: F821
