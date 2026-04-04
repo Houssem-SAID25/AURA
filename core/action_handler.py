@@ -17,6 +17,7 @@ from typing import Optional
 from integrations.obs_controller import OBSController
 from integrations.twitch_api import TwitchAPI
 from integrations.game_launcher import GameLauncher
+from integrations.discord_bot import DiscordNotifier
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,7 @@ class ActionHandler:
         self._obs = OBSController(config)
         self._twitch = TwitchAPI(config)
         self._launcher = GameLauncher(config)
+        self._discord = DiscordNotifier(config)
 
         # Dispatch table: command type → handler method
         self._handlers: dict = {
@@ -46,12 +48,20 @@ class ActionHandler:
             "launch_game": self._handle_launch_game,
             "trending_games": self._handle_trending_games,
             "suggest_game": self._handle_suggest_game,
+            "mute_mic": self._handle_mute_mic,
+            "unmute_mic": self._handle_unmute_mic,
+            "trigger_overlay": self._handle_trigger_overlay,
             "help": self._handle_help,
         }
 
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
+
+    @property
+    def obs(self) -> OBSController:
+        """Return the shared OBSController instance."""
+        return self._obs
 
     def execute(self, command: dict, raw_text: str = "") -> str:
         """
@@ -120,6 +130,7 @@ class ActionHandler:
         logger.info("Executing: start stream")
         success, message = self._obs.start_streaming()
         if success:
+            self._discord.announce_stream_live()
             return "Stream started! You are now live."
         return f"Could not start stream: {message}"
 
@@ -127,6 +138,7 @@ class ActionHandler:
         logger.info("Executing: stop stream")
         success, message = self._obs.stop_streaming()
         if success:
+            self._discord.announce_stream_offline()
             return "Stream stopped. You are now offline."
         return f"Could not stop stream: {message}"
 
@@ -192,3 +204,28 @@ class ActionHandler:
 
     def _handle_help(self, command: dict) -> str:  # noqa: ARG002
         return HELP_TEXT
+
+    def _handle_mute_mic(self, command: dict) -> str:  # noqa: ARG002
+        logger.info("Executing: mute microphone")
+        success, message = self._obs.mute_microphone()
+        if success:
+            return "Microphone muted."
+        return f"Could not mute microphone: {message}"
+
+    def _handle_unmute_mic(self, command: dict) -> str:  # noqa: ARG002
+        logger.info("Executing: unmute microphone")
+        success, message = self._obs.unmute_microphone()
+        if success:
+            return "Microphone unmuted."
+        return f"Could not unmute microphone: {message}"
+
+    def _handle_trigger_overlay(self, command: dict) -> str:
+        source_name: str = command.get("source", "")
+        duration_ms: int = int(command.get("duration_ms", 3000))
+        if not source_name:
+            return "Please specify an overlay source name."
+        logger.info("Executing: trigger overlay '%s' for %d ms", source_name, duration_ms)
+        success, message = self._obs.trigger_overlay(source_name, duration_ms)
+        if success:
+            return f"Overlay '{source_name}' triggered."
+        return f"Could not trigger overlay: {message}"

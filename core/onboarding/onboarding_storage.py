@@ -14,7 +14,7 @@ import json
 import logging
 import os
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +26,9 @@ _PROFILE_PATH = os.path.join(_REPO_ROOT, "config", "user_profile.json")
 
 # Accepted Twitch URL prefixes and domain for validation
 _TWITCH_DOMAIN = "twitch.tv"
+
+# OBS WebSocket ports to probe during auto-detection
+_OBS_PROBE_PORTS = (4455, 4444)
 
 
 def profile_exists() -> bool:
@@ -75,12 +78,27 @@ def build_profile(
     username: str,
     twitch: str = "",
     other_links: str = "",
+    *,
+    twitch_access_token: str = "",
+    twitch_refresh_token: str = "",
+    twitch_user_id: str = "",
+    twitch_login: str = "",
+    discord_bot_token: str = "",
+    discord_channel_id: str = "",
+    obs_auto_detected_port: Optional[int] = None,
 ) -> dict[str, Any]:
     """Construct the profile dict from wizard inputs."""
     return {
         "language": language,
         "username": username.strip(),
         "twitch": _normalise_twitch(twitch),
+        "twitch_access_token": twitch_access_token,
+        "twitch_refresh_token": twitch_refresh_token,
+        "twitch_user_id": twitch_user_id,
+        "twitch_login": twitch_login,
+        "discord_bot_token": discord_bot_token,
+        "discord_channel_id": discord_channel_id,
+        "obs_auto_detected_port": obs_auto_detected_port,
         "other_links": other_links.strip(),
         "created_at": datetime.now(timezone.utc).isoformat(),
         "settings": {
@@ -88,6 +106,27 @@ def build_profile(
             "assistant_name": "AURA",
         },
     }
+
+
+def detect_obs_port() -> Optional[int]:
+    """
+    Probe common OBS WebSocket ports and return the first responsive one.
+
+    Tries ports ``4455`` (OBS 28+) then ``4444`` (legacy obs-websocket plugin).
+    Returns the port number as an ``int`` if found, or ``None`` if OBS is not
+    running or WebSocket is not enabled.
+    """
+    import socket  # noqa: PLC0415
+
+    for port in _OBS_PROBE_PORTS:
+        try:
+            with socket.create_connection(("localhost", port), timeout=1.0):
+                logger.info("OBS WebSocket detected on port %d.", port)
+                return port
+        except (OSError, ConnectionRefusedError):
+            continue
+    logger.debug("OBS WebSocket not detected on any probe port.")
+    return None
 
 
 def validate_twitch(value: str) -> bool:

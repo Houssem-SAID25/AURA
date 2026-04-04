@@ -27,5 +27,11 @@
     "intent": "stream",
     "game": "minecraft",
     "actions": ["launch_obs", "launch_game", "open_twitch"]
+  },
+  "mute_and_brb": {
+    "description": "Mute the microphone and switch to the BRB scene",
+    "keywords": ["mute and brb", "going brb", "be right back", "brb scene"],
+    "intent": "mute_brb",
+    "actions": ["mute_mic", "switch_scene"]
   }
 }

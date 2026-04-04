@@ -582,12 +582,17 @@ class AuraApp(ctk.CTk):
         """Background thread: run the voice assistant loop."""
         try:
             from core.session import create_session  # noqa: PLC0415
+            from core.onboarding.onboarding_storage import load_profile  # noqa: PLC0415
 
-            session = create_session(self._config)
+            profile = load_profile()
+            session = create_session(self._config, profile=profile)
             stt = session.stt
             tts = session.tts
             parser = session.parser
             handler = session.handler
+
+            if session.events is not None:
+                session.events.start()
         except Exception as exc:  # pylint: disable=broad-except
             self._post("log", f"[ERROR] Initialisation failed: {exc}\n")
             self._post("state", "error")
