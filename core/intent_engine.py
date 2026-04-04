@@ -458,13 +458,22 @@ class IntentEngine:
 
     @staticmethod
     def _detect_language(text: str) -> str:
-        """Heuristically detect whether text is French or English."""
+        """Heuristically detect whether text is French or English.
+
+        Requires at least 2 French marker words (or 1 unambiguous marker) to
+        avoid false-positives from French loanwords in English text.
+        """
         fr_markers = {"je", "vais", "veux", "jouer", "lancer", "streamer",
-                      "jeu", "jeux", "arrêter", "ouvrir", "aide", "merci",
-                      "bonjour", "salut", "aller", "direct", "en"}
+                      "jeu", "jeux", "arrêter", "ouvrir", "aide", "bonjour",
+                      "salut", "aller", "direct"}
+        # Strong single-word indicators (unambiguous French)
+        fr_strong = {"arrêter", "jouer", "lancer", "streamer", "veux", "bonjour",
+                     "salut", "jeux", "ouvrir"}
         words = set(text.split())
-        fr_count = len(words & fr_markers)
-        return "fr" if fr_count >= 1 else "en"
+        common = words & fr_markers
+        strong = words & fr_strong
+        # Require ≥2 French markers OR ≥1 unambiguous/strong marker
+        return "fr" if len(common) >= 2 or bool(strong) else "en"
 
     def _match_intent(self, text: str, lang: str) -> tuple[Optional[str], int]:
         """Return (best_intent, score) for *text*."""

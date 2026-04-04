@@ -114,11 +114,11 @@ class TestContextEngineProbe:
         assert result["game_installed"] is True
 
     def test_game_installed_false_when_path_missing(self):
-        engine = self._make_engine()
-        # valorant path "C:\\valorant.exe" does not exist on the test machine
-        result = engine.probe({"intent": "launch_game", "game": "valorant"})
-        # Will be False because the file doesn't exist
-        assert isinstance(result["game_installed"], bool)
+        with patch("os.path.isfile", return_value=False):
+            engine = self._make_engine()
+            result = engine.probe({"intent": "launch_game", "game": "valorant"})
+        # "C:\\valorant.exe" is in config but isfile is mocked to False
+        assert result["game_installed"] is False
 
     def test_game_installed_true_when_not_in_config(self):
         engine = self._make_engine()

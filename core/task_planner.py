@@ -139,7 +139,17 @@ class TaskPlanner:
     # ------------------------------------------------------------------
 
     def _lookup(self, intent: str, game: str, stream: bool) -> list[str]:
-        """Find the action list for *intent*, consulting registry first."""
+        """
+        Find the action list for *intent*, consulting registry first.
+
+        **Stream-flag upgrade**: when the intent is ``"launch_game"`` and the
+        stream flag is True (the user mentioned streaming), the plan is
+        automatically upgraded to a full ``"gaming_stream_session"`` sequence
+        (launch OBS, launch game, open Twitch, start stream).  This makes
+        natural utterances like "let's play valorant on stream" produce the
+        most useful multi-action response without requiring the intent engine
+        to perfectly distinguish ``launch_game`` from ``gaming_stream_session``.
+        """
         # Registry overrides built-ins
         if intent in self._registry_map:
             return list(self._registry_map[intent])

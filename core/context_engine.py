@@ -222,14 +222,36 @@ class ContextEngine:
 
         Falls back to True when no path is configured (platform may handle
         launch differently, e.g. Steam URI).
+
+        Matching is done by checking whether the requested *game_name* equals
+        a config key (case-insensitive), or is a complete substring of a config
+        key only when the config key contains the full game_name as a word
+        boundary.  This avoids partial matches (e.g. "cs" matching "cs2").
         """
         games_cfg: dict = self._config.get("games", {})
-        # Find a matching key (case-insensitive partial match)
+        game_lower = game_name.lower().strip()
         path = ""
+
         for key, val in games_cfg.items():
-            if game_name.lower() in key.lower() or key.lower() in game_name.lower():
+            key_lower = key.lower().strip()
+            # Prefer exact match
+            if key_lower == game_lower:
                 path = val
                 break
+            # Accept if the game name is fully contained in the config key
+            # but only as a complete token (surrounded by word boundaries)
+            # e.g. "valorant" in "valorant" ✓, "cs" in "cs2" ✗
+            if game_lower in key_lower:
+                # Ensure it is a true token boundary match
+                idx = key_lower.find(game_lower)
+                before_ok = idx == 0 or not key_lower[idx - 1].isalnum()
+                after_ok = (
+                    idx + len(game_lower) >= len(key_lower)
+                    or not key_lower[idx + len(game_lower)].isalnum()
+                )
+                if before_ok and after_ok:
+                    path = val
+                    break
 
         if not path:
             # Game not in config – optimistically allow (may still launch via Steam)

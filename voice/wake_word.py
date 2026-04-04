@@ -261,14 +261,18 @@ class WakeWordDetector:
             with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
                 tmp_path = tmp.name
                 tmp.write(audio.get_wav_data())
+                # Flush before closing so Whisper reads a complete file
             result = model.transcribe(tmp_path, fp16=False)
             return result.get("text", "").strip()
         except Exception as exc:  # pylint: disable=broad-except
             logger.debug("WakeWord Whisper transcription error: %s", exc)
             return None
         finally:
-            if tmp_path and os.path.exists(tmp_path):
-                os.remove(tmp_path)
+            if tmp_path is not None:
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
 
     def _transcribe_google(self, audio) -> Optional[str]:
         """Transcribe *audio* with Google Web Speech API."""
