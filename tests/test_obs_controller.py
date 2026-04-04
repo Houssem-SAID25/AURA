@@ -76,10 +76,9 @@ class TestConnection:
 
     def test_connect_retries_after_cooldown(self, controller, monkeypatch):
         """After the cooldown expires, a new connection attempt is made."""
-        call_count = 0
-        real_connect = ConnectionRefusedError
+        connection_error = ConnectionRefusedError
 
-        with patch("obsws_python.ReqClient", side_effect=real_connect):
+        with patch("obsws_python.ReqClient", side_effect=connection_error):
             controller._connect()
 
         # Force the cooldown to have already passed
