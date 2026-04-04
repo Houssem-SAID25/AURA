@@ -5,37 +5,14 @@ Entry point: starts the assistant and runs the continuous listening loop.
 """
 
 import logging
-import json
-import os
 import sys
 
+from utils.config_loader import load_config
+from utils.logger import setup_logging
 from voice.speech_to_text import SpeechToText
 from voice.text_to_speech import TextToSpeech
 from core.command_parser import CommandParser
 from core.action_handler import ActionHandler
-
-
-def load_config(path: str = "config.json") -> dict:
-    """Load the JSON configuration file relative to this script's directory."""
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    config_path = os.path.join(base_dir, path)
-    with open(config_path, "r", encoding="utf-8") as f:
-        return json.load(f)
-
-
-def setup_logging(config: dict) -> None:
-    """Configure root logger based on config settings."""
-    log_cfg = config.get("logging", {})
-    level = getattr(logging, log_cfg.get("level", "INFO").upper(), logging.INFO)
-    log_file = log_cfg.get("file", "aura.log")
-    handlers: list[logging.Handler] = [logging.StreamHandler(sys.stdout)]
-    if log_file:
-        handlers.append(logging.FileHandler(log_file, encoding="utf-8"))
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        handlers=handlers,
-    )
 
 
 def main() -> None:

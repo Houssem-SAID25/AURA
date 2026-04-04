@@ -57,11 +57,20 @@ class ActionHandler:
         """
         Execute a command dict and return a spoken response.
 
+        If the command contains an ``"actions"`` list (produced by the
+        :class:`~core.command_registry.CommandRegistry` for compound
+        commands), each action is executed in sequence and the responses
+        are joined.  Otherwise the single ``"type"`` key is dispatched.
+
         Parameters
         ----------
         command:  Structured command from ``CommandParser.parse()``.
         raw_text: Original transcribed text (for logging / fallback).
         """
+        actions: list = command.get("actions", [])
+        if actions:
+            return self._execute_action_list(command, actions)
+
         cmd_type: str = command.get("type", "")
         handler = self._handlers.get(cmd_type)
 
@@ -74,6 +83,34 @@ class ActionHandler:
         except Exception as exc:  # pylint: disable=broad-except
             logger.error("Error executing '%s': %s", cmd_type, exc, exc_info=True)
             return f"Something went wrong while executing {cmd_type}. Please check the logs."
+
+    def _execute_action_list(self, command: dict, actions: list[str]) -> str:
+        """
+        Execute a sequence of actions from a registry command.
+
+        Each action name must correspond to a key in the dispatch table.
+        Actions that fail are logged but do not abort the sequence.
+
+        Parameters
+        ----------
+        command: Full command dict (passed to each individual handler).
+        actions: Ordered list of action name strings to execute.
+        """
+        responses: list[str] = []
+        for action_name in actions:
+            handler = self._handlers.get(action_name)
+            if handler is None:
+                logger.warning("No handler for action: '%s'", action_name)
+                continue
+            try:
+                response = handler(command)
+                responses.append(response)
+                logger.debug("Action '%s' completed: %s", action_name, response)
+            except Exception as exc:  # pylint: disable=broad-except
+                logger.error(
+                    "Error executing action '%s': %s", action_name, exc, exc_info=True
+                )
+        return " ".join(responses) if responses else "No actions were executed."
 
     # ------------------------------------------------------------------
     # Command handlers
