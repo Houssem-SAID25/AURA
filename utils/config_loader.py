@@ -54,7 +54,7 @@ _DEFAULTS: dict[str, Any] = {
         "whisper_model": "base",
         "tts_rate": 175,
         "tts_volume": 1.0,
-        "tts_backend": "pyttsx3",
+        "tts_backend": "edge-tts",
         "listen_timeout": 5,
         "phrase_time_limit": 10,
         "naturalizer": {
@@ -184,6 +184,15 @@ def validate_config(config: dict) -> dict:
     for key, value in config.items():
         if key not in validated:
             validated[key] = value
+
+    # Apply language setting if present
+    lang = validated.get("language") or config.get("language", "en")
+    if lang:
+        try:
+            from utils.i18n import i18n  # noqa: PLC0415
+            i18n.set_language(str(lang))
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.warning("Could not set language '%s': %s", lang, exc)
 
     return validated
 

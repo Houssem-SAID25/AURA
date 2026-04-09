@@ -6,7 +6,7 @@ Integration tests for the full AURA voice pipeline:
     SpeechToText  ->  CommandParser  ->  ActionHandler  ->  TextToSpeech
 
 All external I/O (microphone, Whisper model, OBS, Twitch, game launcher,
-pyttsx3 engine) is mocked so the tests are fast, offline, and reproducible.
+edge-tts engine) is mocked so the tests are fast, offline, and reproducible.
 """
 
 from __future__ import annotations
@@ -29,6 +29,16 @@ if "speech_recognition" not in sys.modules:
 if "pyttsx3" not in sys.modules:
     _pyttsx3_mock = MagicMock()
     sys.modules["pyttsx3"] = _pyttsx3_mock
+
+if "edge_tts" not in sys.modules:
+    _edge_tts_mock = MagicMock()
+    sys.modules["edge_tts"] = _edge_tts_mock
+
+if "pygame" not in sys.modules:
+    _pygame_mock = MagicMock()
+    _pygame_mock.mixer = MagicMock()
+    _pygame_mock.mixer.get_busy = MagicMock(return_value=False)
+    sys.modules["pygame"] = _pygame_mock
 
 # Now safe to import the AURA modules
 from core.action_handler import ActionHandler  # noqa: E402
@@ -57,6 +67,7 @@ def config() -> dict:
             "whisper_model": "base",
             "tts_rate": 175,
             "tts_volume": 1.0,
+            "tts_backend": "pyttsx3",
             "listen_timeout": 5,
             "phrase_time_limit": 10,
             "naturalizer": {"enabled": False},
