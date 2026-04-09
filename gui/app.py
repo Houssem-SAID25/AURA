@@ -26,6 +26,7 @@ import queue
 import random
 import threading
 import time
+from typing import Any, Callable
 
 import customtkinter as ctk
 import tkinter as tk
@@ -171,7 +172,7 @@ class VisualizerCanvas(tk.Canvas):
 class SettingsSidebar(ctk.CTkFrame):
     """Slide-in sidebar for AURA settings."""
 
-    def __init__(self, parent: ctk.CTk, config: dict, on_save: callable) -> None:
+    def __init__(self, parent: ctk.CTk, config: dict, on_save: Callable[[], None]) -> None:
         super().__init__(
             parent,
             fg_color=BG_CARD,
@@ -484,7 +485,7 @@ class AuraApp(ctk.CTk):
         self._refresh_account_buttons()
 
     def _account_btn(
-        self, parent: ctk.CTkFrame, col: int, name: str, color: str, cmd: callable
+        self, parent: ctk.CTkFrame, col: int, name: str, color: str, cmd: Callable[[], None]
     ) -> ctk.CTkButton:
         btn = ctk.CTkButton(
             parent, text=name,
@@ -640,7 +641,7 @@ class AuraApp(ctk.CTk):
     # Message queue
     # ──────────────────────────────────────────────────────────────────────
 
-    def _post(self, kind: str, data) -> None:
+    def _post(self, kind: str, data: Any) -> None:
         self._msg_queue.put((kind, data))
 
     def _poll_queue(self) -> None:
