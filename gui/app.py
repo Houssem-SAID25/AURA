@@ -179,7 +179,7 @@ class SettingsSidebar(ctk.CTkFrame):
             corner_radius=0,
             border_width=1,
             border_color=BORDER,
-            width=320,
+            width=340,
         )
         self._config = config
         self._on_save = on_save
@@ -195,11 +195,30 @@ class SettingsSidebar(ctk.CTkFrame):
             text_color=ACCENT_PUR,
         ).grid(row=0, column=0, padx=20, pady=(16, 8), sticky="w")
 
-        # Whisper model selector
+        # ── Language selector ──────────────────────────────────────────
+        ctk.CTkLabel(
+            self, text=i18n.t("language"),
+            font=ctk.CTkFont(size=12), text_color=TEXT_WHITE,
+        ).grid(row=1, column=0, padx=20, sticky="w")
+        current_lang = self._config.get("language", "en")
+        self._lang_var = ctk.StringVar(
+            value=i18n.t("language_fr") if current_lang == "fr" else i18n.t("language_en")
+        )
+        ctk.CTkOptionMenu(
+            self,
+            values=[i18n.t("language_en"), i18n.t("language_fr")],
+            variable=self._lang_var,
+            fg_color=BG_DEEP,
+            button_color=ACCENT_PUR,
+            button_hover_color=_blend(ACCENT_PUR, 0.8),
+            text_color=TEXT_WHITE,
+        ).grid(row=2, column=0, padx=20, pady=(2, 12), sticky="ew")
+
+        # ── Whisper model selector ─────────────────────────────────────
         ctk.CTkLabel(
             self, text=i18n.t("whisper_model"),
             font=ctk.CTkFont(size=12), text_color=TEXT_WHITE,
-        ).grid(row=1, column=0, padx=20, sticky="w")
+        ).grid(row=3, column=0, padx=20, sticky="w")
         self._whisper_var = ctk.StringVar(
             value=self._config.get("voice", {}).get("whisper_model", "base")
         )
@@ -211,27 +230,33 @@ class SettingsSidebar(ctk.CTkFrame):
             button_color=ACCENT_PUR,
             button_hover_color=_blend(ACCENT_PUR, 0.8),
             text_color=TEXT_WHITE,
-        ).grid(row=2, column=0, padx=20, pady=(2, 12), sticky="ew")
+        ).grid(row=4, column=0, padx=20, pady=(2, 12), sticky="ew")
 
-        # OBS fields
+        # ── OBS fields ────────────────────────────────────────────────
         obs_cfg = self._config.get("obs", {})
-        self._obs_host  = self._labeled_entry(row=3,  label=i18n.t("obs_host"),     value=obs_cfg.get("host", "localhost"))
-        self._obs_port  = self._labeled_entry(row=5,  label=i18n.t("obs_port"),     value=str(obs_cfg.get("port", 4455)))
-        self._obs_pass  = self._labeled_entry(row=7,  label=i18n.t("obs_password"), value=obs_cfg.get("password", ""), show="*")
+        self._obs_host  = self._labeled_entry(row=5,  label=i18n.t("obs_host"),     value=obs_cfg.get("host", "localhost"))
+        self._obs_port  = self._labeled_entry(row=7,  label=i18n.t("obs_port"),     value=str(obs_cfg.get("port", 4455)))
+        self._obs_pass  = self._labeled_entry(row=9,  label=i18n.t("obs_password"), value=obs_cfg.get("password", ""), show="*")
 
-        # Twitch fields
+        # ── Twitch fields ─────────────────────────────────────────────
         tw_cfg = self._config.get("twitch", {})
-        self._tw_id     = self._labeled_entry(row=9,  label=i18n.t("twitch_client_id"),     value=tw_cfg.get("client_id", ""))
-        self._tw_secret = self._labeled_entry(row=11, label=i18n.t("twitch_client_secret"), value=tw_cfg.get("client_secret", ""), show="*")
+        self._tw_id     = self._labeled_entry(row=11, label=i18n.t("twitch_client_id"),     value=tw_cfg.get("client_id", ""))
+        self._tw_secret = self._labeled_entry(row=13, label=i18n.t("twitch_client_secret"), value=tw_cfg.get("client_secret", ""), show="*")
 
-        # Save button
+        # ── Streaming platform links ───────────────────────────────────
+        profile_cfg = self._config.get("_profile", {})
+        self._tw_link  = self._labeled_entry(row=15, label=i18n.t("twitch_link"),  value=profile_cfg.get("twitch", ""))
+        self._yt_link  = self._labeled_entry(row=17, label=i18n.t("youtube_link"), value=profile_cfg.get("youtube_channel", ""))
+        self._dc_link  = self._labeled_entry(row=19, label=i18n.t("discord_link"), value=profile_cfg.get("discord_channel_id", ""))
+
+        # ── Save button ───────────────────────────────────────────────
         ctk.CTkButton(
             self, text=i18n.t("save"),
             fg_color=ACCENT_PUR,
             hover_color=_blend(ACCENT_PUR, 0.8),
             text_color=TEXT_WHITE,
             command=self._save,
-        ).grid(row=13, column=0, padx=20, pady=20, sticky="ew")
+        ).grid(row=21, column=0, padx=20, pady=20, sticky="ew")
 
     def _labeled_entry(
         self, row: int, label: str, value: str, show: str = ""
@@ -249,6 +274,12 @@ class SettingsSidebar(ctk.CTkFrame):
         return entry
 
     def _save(self) -> None:
+        # Resolve selected language
+        fr_label = i18n.t("language_fr")
+        new_lang = "fr" if self._lang_var.get() == fr_label else "en"
+        self._config["language"] = new_lang
+        i18n.set_language(new_lang)
+
         self._config.setdefault("voice", {})["whisper_model"] = self._whisper_var.get()
         self._config.setdefault("obs", {})["host"]     = self._obs_host.get()
         self._config.setdefault("obs", {})["password"] = self._obs_pass.get()
@@ -258,8 +289,28 @@ class SettingsSidebar(ctk.CTkFrame):
             pass
         self._config.setdefault("twitch", {})["client_id"]     = self._tw_id.get()
         self._config.setdefault("twitch", {})["client_secret"] = self._tw_secret.get()
+
+        # Persist link changes to user profile
+        profile_cfg = self._config.setdefault("_profile", {})
+        profile_cfg["twitch"]          = self._tw_link.get().strip()
+        profile_cfg["youtube_channel"] = self._yt_link.get().strip()
+        profile_cfg["discord_channel_id"] = self._dc_link.get().strip()
+        profile_cfg["language"] = new_lang
+        self._flush_profile(profile_cfg)
+
         self._on_save()
         self.toggle()
+
+    @staticmethod
+    def _flush_profile(profile_patch: dict) -> None:
+        """Merge *profile_patch* into the saved user profile on disk."""
+        try:
+            from core.onboarding.onboarding_storage import load_profile, save_profile  # noqa: PLC0415
+            profile = load_profile()
+            profile.update(profile_patch)
+            save_profile(profile)
+        except Exception:  # pylint: disable=broad-except
+            pass
 
     def toggle(self) -> None:
         """Show or hide the sidebar."""
@@ -292,6 +343,13 @@ class AuraApp(ctk.CTk):
         self._obs_connected  = False
         self._stream_live    = False
         self._mic_active     = False
+
+        # Load user profile so settings sidebar can show/edit links
+        try:
+            from core.onboarding.onboarding_storage import load_profile  # noqa: PLC0415
+            self._config.setdefault("_profile", load_profile())
+        except Exception:  # pylint: disable=broad-except
+            self._config.setdefault("_profile", {})
 
         self.title("AURA – AI Voice Assistant")
         self.geometry("980x740")
@@ -355,7 +413,7 @@ class AuraApp(ctk.CTk):
         # Language toggle
         self._lang_btn = ctk.CTkButton(
             hdr,
-            text="EN",
+            text=i18n.get_language().upper(),
             width=48, height=30,
             fg_color=BG_DEEP, hover_color=BG_CARD,
             text_color=TEXT_WHITE,

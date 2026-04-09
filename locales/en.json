@@ -26,5 +26,11 @@
   "stream_live": "Live",
   "stream_offline": "Offline",
   "mic_active": "Mic Active",
-  "mic_idle": "Mic Idle"
+  "mic_idle": "Mic Idle",
+  "language": "Language",
+  "language_en": "English",
+  "language_fr": "Français",
+  "twitch_link": "Twitch Channel URL",
+  "discord_link": "Discord Server / Invite",
+  "youtube_link": "YouTube Channel URL"
 }

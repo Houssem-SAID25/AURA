@@ -3,12 +3,12 @@ gui/onboarding_window.py
 ========================
 Step-by-step onboarding wizard for AURA's first-launch experience.
 
-Uses the same customtkinter aesthetic as the main AuraApp (dark Jarvis/
-Batcave HUD palette) so the transition is seamless.
+Uses the same customtkinter aesthetic as the main AuraApp (dark purple/cyan
+palette) so the transition is seamless.
 
 Flow
 ----
-  Step 0 – Language selection (FR / EN)
+  Step 0 – Language selection (FR / EN) — with animated welcome orb
   Step 1 – Username / nickname
   Step 2 – Account linking (Twitch, YouTube, OBS, Discord)
   Step 3 – Confirmation summary
@@ -20,6 +20,8 @@ the caller can save the profile and proceed to the main application.
 from __future__ import annotations
 
 import logging
+import math
+import random
 import re
 import tkinter as tk
 from typing import Callable
@@ -35,18 +37,20 @@ from core.onboarding.onboarding_storage import (
 logger = logging.getLogger("AURA.Onboarding")
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Palette (mirrors gui/app.py)
+# Palette (matches gui/app.py purple/cyan theme)
 # ──────────────────────────────────────────────────────────────────────────────
-BG_DEEP    = "#060d1a"
-BG_PANEL   = "#0a1628"
-NEON_CYAN  = "#00d4ff"
-NEON_BLUE  = "#0080ff"
-NEON_GREEN = "#00ff88"
-NEON_AMBER = "#ff9900"
-NEON_RED   = "#ff3366"
-TEXT_BRIGHT = "#d0eeff"
-TEXT_DIM   = "#3a6080"
-BORDER     = "#1a3050"
+BG_DEEP     = "#0D0D0F"
+BG_PANEL    = "#16161A"
+ACCENT_PUR  = "#7C5CFC"
+ACCENT_CYAN = "#00E5C0"
+NEON_RED    = "#FF4466"
+TEXT_BRIGHT = "#FFFFFF"
+TEXT_DIM    = "#888899"
+BORDER      = "#2A2A35"
+
+# Legacy aliases kept for compatibility inside this module
+NEON_CYAN  = ACCENT_CYAN
+NEON_BLUE  = ACCENT_PUR
 
 STEP_NAMES = ["step_language", "step_username", "step_accounts", "step_confirm"]
 TOTAL_STEPS = len(STEP_NAMES)
@@ -78,6 +82,114 @@ def _validate_obs_port(value: str) -> bool:
         return 1 <= port <= 65535
     except ValueError:
         return False
+
+
+def _hex_to_rgb(hex_color: str) -> tuple[int, int, int]:
+    h = hex_color.lstrip("#")
+    return int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+
+
+def _rgb_to_hex(r: int, g: int, b: int) -> str:
+    return f"#{r:02x}{g:02x}{b:02x}"
+
+
+def _blend_hex(c1: str, c2: str, t: float) -> str:
+    """Blend two hex colours at position t (0.0 = c1, 1.0 = c2)."""
+    r1, g1, b1 = _hex_to_rgb(c1)
+    r2, g2, b2 = _hex_to_rgb(c2)
+    return _rgb_to_hex(int(r1 + (r2 - r1) * t), int(g1 + (g2 - g1) * t), int(b1 + (b2 - b1) * t))
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Animated Welcome Orb Canvas
+# ──────────────────────────────────────────────────────────────────────────────
+
+class _WelcomeOrb(tk.Canvas):
+    """Animated pulsing-orb logo shown on the first onboarding step."""
+
+    FPS = 30
+    NUM_RINGS = 3
+
+    def __init__(self, parent: tk.Widget, size: int = 180, **kwargs) -> None:
+        super().__init__(
+            parent, width=size, height=size,
+            bg=BG_DEEP, highlightthickness=0, **kwargs,
+        )
+        self._size = size
+        self._cx = size // 2
+        self._cy = size // 2
+        self._tick = 0
+        self._alive = True
+
+        # Ring phases evenly distributed
+        self._ring_phases = [i / self.NUM_RINGS for i in range(self.NUM_RINGS)]
+        self._ring_ids: list[int] = []
+        self._orb_id = 0
+        self._label_id = 0
+
+        self._build()
+        self._animate()
+
+    def _build(self) -> None:
+        cx, cy = self._cx, self._cy
+        r = 70
+
+        # Static background rings
+        for radius in (r - 4, r + 12, r + 26):
+            self.create_oval(
+                cx - radius, cy - radius, cx + radius, cy + radius,
+                outline=BORDER, width=1,
+            )
+
+        # Pulsing rings (animated)
+        for _ in range(self.NUM_RINGS):
+            rid = self.create_oval(cx, cy, cx, cy, outline=ACCENT_PUR, width=2)
+            self._ring_ids.append(rid)
+
+        # Centre orb
+        self._orb_id = self.create_oval(
+            cx - r, cy - r, cx + r, cy + r,
+            fill=BG_PANEL, outline=ACCENT_PUR, width=3,
+        )
+
+        # "AURA" text centred in orb
+        self._label_id = self.create_text(
+            cx, cy,
+            text="AURA",
+            fill=TEXT_BRIGHT,
+            font=("Consolas", 22, "bold"),
+        )
+
+    def _animate(self) -> None:
+        if not self._alive:
+            return
+
+        self._tick += 1
+        t_norm = (self._tick % 100) / 100.0
+
+        cx, cy = self._cx, self._cy
+        base_r = 70
+
+        # Animate each pulsing ring
+        for i, rid in enumerate(self._ring_ids):
+            phase = (t_norm + self._ring_phases[i]) % 1.0
+            # rings expand and fade out
+            radius = base_r + phase * 40
+            alpha = max(0.0, 1.0 - phase)
+            colour = _blend_hex(ACCENT_PUR, BG_DEEP, 1.0 - alpha)
+            self.coords(rid, cx - radius, cy - radius, cx + radius, cy + radius)
+            self.itemconfig(rid, outline=colour)
+
+        # Gently pulse the orb border between purple and cyan
+        pulse = (math.sin(self._tick * 0.08) + 1) / 2
+        orb_outline = _blend_hex(ACCENT_PUR, ACCENT_CYAN, pulse)
+        self.itemconfig(self._orb_id, outline=orb_outline)
+
+        self.after(1000 // self.FPS, self._animate)
+
+    def destroy(self) -> None:
+        self._alive = False
+        super().destroy()
 
 
 class OnboardingWindow(ctk.CTkToplevel):
@@ -138,16 +250,16 @@ class OnboardingWindow(ctk.CTkToplevel):
     # ── Layout skeleton ───────────────────────────────────────────────────
 
     def _build_header(self) -> None:
-        hdr = ctk.CTkFrame(self, fg_color=BG_PANEL, corner_radius=0, height=72)
+        hdr = ctk.CTkFrame(self, fg_color=BG_PANEL, corner_radius=0, height=62)
         hdr.pack(fill="x")
         hdr.pack_propagate(False)
 
         ctk.CTkLabel(
             hdr,
             text="◈  AURA",
-            font=("Consolas", 22, "bold"),
-            text_color=NEON_CYAN,
-        ).pack(side="left", padx=24, pady=16)
+            font=("Consolas", 20, "bold"),
+            text_color=ACCENT_PUR,
+        ).pack(side="left", padx=24, pady=14)
 
         self._step_label = ctk.CTkLabel(
             hdr,
@@ -158,15 +270,15 @@ class OnboardingWindow(ctk.CTkToplevel):
         self._step_label.pack(side="right", padx=24)
 
     def _build_step_indicator(self) -> None:
-        bar = ctk.CTkFrame(self, fg_color=BG_PANEL, height=6, corner_radius=0)
+        bar = ctk.CTkFrame(self, fg_color=BG_PANEL, height=4, corner_radius=0)
         bar.pack(fill="x")
         bar.pack_propagate(False)
         self._progress_bar = ctk.CTkProgressBar(
             bar,
-            height=6,
+            height=4,
             corner_radius=0,
-            fg_color=BG_DEEP,
-            progress_color=NEON_CYAN,
+            fg_color=BORDER,
+            progress_color=ACCENT_PUR,
         )
         self._progress_bar.pack(fill="x")
         self._progress_bar.set(0)
@@ -193,9 +305,9 @@ class OnboardingWindow(ctk.CTkToplevel):
             self._footer,
             text=t("onboarding.btn_next"),
             width=200,
-            fg_color=NEON_BLUE,
-            hover_color=NEON_CYAN,
-            text_color=BG_DEEP,
+            fg_color=ACCENT_PUR,
+            hover_color=ACCENT_CYAN,
+            text_color=TEXT_BRIGHT,
             font=("Consolas", 13, "bold"),
             command=self._go_next,
         )
@@ -241,56 +353,66 @@ class OnboardingWindow(ctk.CTkToplevel):
     def _render_language_step(self) -> None:
         frame = self._content_frame
 
+        # Animated orb centred at top
+        orb = _WelcomeOrb(frame, size=180)
+        orb.pack(pady=(20, 0))
+
         ctk.CTkLabel(
             frame,
             text=t("onboarding.welcome"),
-            font=("Consolas", 24, "bold"),
-            text_color=NEON_CYAN,
-        ).pack(pady=(28, 4))
+            font=("Consolas", 22, "bold"),
+            text_color=ACCENT_PUR,
+        ).pack(pady=(8, 2))
 
         ctk.CTkLabel(
             frame,
             text=t("onboarding.welcome_subtitle"),
-            font=("Consolas", 12),
+            font=("Consolas", 11),
             text_color=TEXT_DIM,
-        ).pack(pady=(0, 28))
+        ).pack(pady=(0, 16))
 
         ctk.CTkLabel(
             frame,
             text=t("onboarding.choose_language"),
-            font=("Consolas", 14),
+            font=("Consolas", 13),
             text_color=TEXT_BRIGHT,
-        ).pack(pady=(0, 16))
+        ).pack(pady=(0, 10))
+
+        # Language selection row (side by side)
+        row = ctk.CTkFrame(frame, fg_color=BG_DEEP)
+        row.pack()
 
         btn_fr = ctk.CTkButton(
-            frame,
+            row,
             text=f"{t('onboarding.fr_flag')}  {t('onboarding.language_fr')}",
-            width=200,
-            height=48,
+            width=180,
+            height=50,
             font=("Consolas", 14, "bold"),
-            fg_color=NEON_BLUE if self._lang == "fr" else BG_PANEL,
-            hover_color=NEON_CYAN,
-            text_color=BG_DEEP if self._lang == "fr" else TEXT_BRIGHT,
-            border_color=NEON_CYAN if self._lang == "fr" else BORDER,
+            fg_color=ACCENT_PUR if self._lang == "fr" else BG_PANEL,
+            hover_color=ACCENT_CYAN,
+            text_color=TEXT_BRIGHT,
+            border_color=ACCENT_PUR if self._lang == "fr" else BORDER,
             border_width=2,
+            corner_radius=10,
             command=lambda: self._select_language("fr"),
         )
-        btn_fr.pack(pady=6)
+        btn_fr.pack(side="left", padx=8)
 
         btn_en = ctk.CTkButton(
-            frame,
+            row,
             text=f"{t('onboarding.en_flag')}  {t('onboarding.language_en')}",
-            width=200,
-            height=48,
+            width=180,
+            height=50,
             font=("Consolas", 14, "bold"),
-            fg_color=NEON_BLUE if self._lang == "en" else BG_PANEL,
-            hover_color=NEON_CYAN,
-            text_color=BG_DEEP if self._lang == "en" else TEXT_BRIGHT,
-            border_color=NEON_CYAN if self._lang == "en" else BORDER,
+            fg_color=ACCENT_PUR if self._lang == "en" else BG_PANEL,
+            hover_color=ACCENT_CYAN,
+            text_color=TEXT_BRIGHT,
+            border_color=ACCENT_PUR if self._lang == "en" else BORDER,
             border_width=2,
+            corner_radius=10,
             command=lambda: self._select_language("en"),
         )
-        btn_en.pack(pady=6)
+        btn_en.pack(side="left", padx=8)
 
         self._lang_buttons = {"fr": btn_fr, "en": btn_en}
 
@@ -307,7 +429,7 @@ class OnboardingWindow(ctk.CTkToplevel):
             frame,
             text=t("onboarding.username_title"),
             font=("Consolas", 18, "bold"),
-            text_color=NEON_CYAN,
+            text_color=ACCENT_PUR,
         ).pack(pady=(32, 8))
 
         ctk.CTkLabel(
@@ -325,7 +447,7 @@ class OnboardingWindow(ctk.CTkToplevel):
             height=44,
             font=("Consolas", 14),
             fg_color=BG_PANEL,
-            border_color=NEON_BLUE,
+            border_color=ACCENT_PUR,
             text_color=TEXT_BRIGHT,
         )
         entry.pack(pady=8)
@@ -347,7 +469,7 @@ class OnboardingWindow(ctk.CTkToplevel):
             frame,
             text=t("onboarding.accounts_title"),
             font=("Consolas", 18, "bold"),
-            text_color=NEON_CYAN,
+            text_color=ACCENT_PUR,
         ).pack(pady=(12, 2))
 
         ctk.CTkLabel(
@@ -375,7 +497,7 @@ class OnboardingWindow(ctk.CTkToplevel):
             height=38,
             font=("Consolas", 12),
             fg_color=BG_PANEL,
-            border_color=NEON_BLUE,
+            border_color=ACCENT_PUR,
             text_color=TEXT_BRIGHT,
         )
         self._twitch_entry.pack(fill="x", padx=8, pady=(0, 2))
@@ -397,7 +519,7 @@ class OnboardingWindow(ctk.CTkToplevel):
             height=38,
             font=("Consolas", 12),
             fg_color=BG_PANEL,
-            border_color=NEON_BLUE,
+            border_color=ACCENT_PUR,
             text_color=TEXT_BRIGHT,
         )
         self._youtube_entry.pack(fill="x", padx=8, pady=(0, 2))
@@ -531,7 +653,7 @@ class OnboardingWindow(ctk.CTkToplevel):
             row,
             text=f"{icon}  {label}",
             font=("Consolas", 12, "bold"),
-            text_color=NEON_CYAN,
+            text_color=ACCENT_PUR,
             anchor="w",
         ).pack(side="left", padx=12)
 
@@ -542,7 +664,7 @@ class OnboardingWindow(ctk.CTkToplevel):
             frame,
             text=t("onboarding.confirm_title"),
             font=("Consolas", 18, "bold"),
-            text_color=NEON_CYAN,
+            text_color=ACCENT_PUR,
         ).pack(pady=(20, 12))
 
         none_str = t("onboarding.confirm_none")

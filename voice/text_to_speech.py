@@ -159,6 +159,7 @@ class TextToSpeech:
     """
 
     def __init__(self, config: dict) -> None:
+        self._config = config
         self._voice_cfg = config.get("voice", {})
         self._rate: int = int(self._voice_cfg.get("tts_rate", 175))
         self._volume: float = float(self._voice_cfg.get("tts_volume", 1.0))
@@ -262,7 +263,7 @@ class TextToSpeech:
 
         logger.info("AURA says: %s", text)
 
-        effective_lang = lang or self._lang
+        effective_lang = lang or self._config.get("language", self._lang)
 
         if self._backend == "edge-tts":
             speak(text, lang=effective_lang)
