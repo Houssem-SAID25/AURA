@@ -733,9 +733,10 @@ class AuraApp(ctk.CTk):
 
     def _on_settings_save(self) -> None:
         try:
-            import json, os  # noqa: PLC0415
-            repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            config_path = os.path.join(repo_root, "config.json")
+            import json  # noqa: PLC0415
+            import os as _os  # noqa: PLC0415
+            repo_root = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+            config_path = _os.path.join(repo_root, "config.json")
             with open(config_path, "w", encoding="utf-8") as fh:
                 json.dump(self._config, fh, indent=2, ensure_ascii=False)
             self._append_transcript("SYSTEM", "Settings saved.")
