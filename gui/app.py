@@ -310,7 +310,7 @@ class SettingsSidebar(ctk.CTkFrame):
             profile.update(profile_patch)
             save_profile(profile)
         except Exception:  # pylint: disable=broad-except
-            pass
+            logger.exception("Failed to flush profile to disk.")
 
     def toggle(self) -> None:
         """Show or hide the sidebar."""
@@ -349,6 +349,7 @@ class AuraApp(ctk.CTk):
             from core.onboarding.onboarding_storage import load_profile  # noqa: PLC0415
             self._config.setdefault("_profile", load_profile())
         except Exception:  # pylint: disable=broad-except
+            logger.exception("Failed to load user profile; settings links will be empty.")
             self._config.setdefault("_profile", {})
 
         self.title("AURA – AI Voice Assistant")

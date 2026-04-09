@@ -109,6 +109,8 @@ class _WelcomeOrb(tk.Canvas):
 
     FPS = 30
     NUM_RINGS = 3
+    MAX_RING_EXPANSION = 40   # pixels the pulsing rings expand beyond base radius
+    PULSE_SPEED = 0.08        # controls orb border colour oscillation speed
 
     def __init__(self, parent: tk.Widget, size: int = 180, **kwargs) -> None:
         super().__init__(
@@ -174,14 +176,14 @@ class _WelcomeOrb(tk.Canvas):
         for i, rid in enumerate(self._ring_ids):
             phase = (t_norm + self._ring_phases[i]) % 1.0
             # rings expand and fade out
-            radius = base_r + phase * 40
+            radius = base_r + phase * self.MAX_RING_EXPANSION
             alpha = max(0.0, 1.0 - phase)
             colour = _blend_hex(ACCENT_PUR, BG_DEEP, 1.0 - alpha)
             self.coords(rid, cx - radius, cy - radius, cx + radius, cy + radius)
             self.itemconfig(rid, outline=colour)
 
         # Gently pulse the orb border between purple and cyan
-        pulse = (math.sin(self._tick * 0.08) + 1) / 2
+        pulse = (math.sin(self._tick * self.PULSE_SPEED) + 1) / 2
         orb_outline = _blend_hex(ACCENT_PUR, ACCENT_CYAN, pulse)
         self.itemconfig(self._orb_id, outline=orb_outline)
 
