@@ -4,7 +4,8 @@ SpeechRecognition>=3.10.0
 pyaudio>=0.2.14
 
 # Text-to-speech
-pyttsx3>=2.90
+edge-tts>=6.1.9
+pygame>=2.5.0
 
 # NLP / command parsing
 rapidfuzz>=3.5.2
@@ -17,6 +18,10 @@ requests>=2.31.0
 
 # Discord integration
 discord.py>=2.3.0
+
+# Google / YouTube OAuth
+google-auth-oauthlib>=1.2.0
+google-api-python-client>=2.120.0
 
 # Utilities
 python-dotenv>=1.0.0

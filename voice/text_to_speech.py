@@ -1,14 +1,20 @@
 """
 voice/text_to_speech.py
 =======================
-Converts text to spoken audio using pyttsx3 (offline TTS engine).
+Converts text to spoken audio using edge-tts (Microsoft Azure neural voices)
+as the primary backend, with fallback support for legacy backends (pyttsx3,
+Coqui TTS, Piper TTS).
 
-`pyttsx3` works on Windows, macOS, and Linux without an internet connection.
+The primary `edge-tts` backend generates audio to a temporary MP3 file and
+plays it via pygame.mixer.  The optional `lang` parameter controls which
+neural voice is used.
+
 Speech rate and volume can be tuned through ``config.json``.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import subprocess
@@ -19,7 +25,15 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# WAV phrase cache helpers
+# edge-tts voice map: lang code -> Microsoft Neural voice name
+# ---------------------------------------------------------------------------
+VOICES: dict[str, str] = {
+    "en": "en-US-JennyNeural",
+    "fr": "fr-FR-DeniseNeural",
+}
+
+# ---------------------------------------------------------------------------
+# WAV phrase cache helpers (used by Coqui/Piper backends)
 # ---------------------------------------------------------------------------
 _CACHE_DIR = os.path.join(tempfile.gettempdir(), "aura_tts_cache")
 
@@ -37,15 +51,104 @@ def _text_hash(text: str) -> str:
     return hashlib.md5(text.encode("utf-8")).hexdigest()
 
 
+# ---------------------------------------------------------------------------
+# pygame mixer helpers
+# ---------------------------------------------------------------------------
+
+_mixer_initialised = False
+
+
+def _ensure_mixer() -> bool:
+    """Initialise pygame.mixer if not already done. Returns True on success."""
+    global _mixer_initialised
+    if _mixer_initialised:
+        return True
+    try:
+        import pygame  # noqa: PLC0415
+        pygame.mixer.init()
+        _mixer_initialised = True
+        return True
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.warning("pygame.mixer could not be initialised: %s", exc)
+        return False
+
+
+# ---------------------------------------------------------------------------
+# Async edge-tts synthesis helper
+# ---------------------------------------------------------------------------
+
+async def _synthesise_edge_tts(text: str, voice: str, output_path: str) -> None:
+    """Generate speech with edge-tts and write to *output_path* (MP3)."""
+    import edge_tts  # noqa: PLC0415
+    communicate = edge_tts.Communicate(text, voice)
+    await communicate.save(output_path)
+
+
+# ---------------------------------------------------------------------------
+# Module-level speak() – sync wrapper (public convenience function)
+# ---------------------------------------------------------------------------
+
+def speak(text: str, lang: str = "en") -> None:
+    """Speak *text* using edge-tts with the voice for *lang*.
+
+    This is a synchronous wrapper around the async ``edge_tts.Communicate``
+    API.  It generates audio to a temporary MP3 file, plays it with
+    ``pygame.mixer``, then removes the file.
+
+    Parameters
+    ----------
+    text:
+        The text to be spoken.
+    lang:
+        Language code.  ``"en"`` → Jenny Neural (default),
+        ``"fr"`` → Denise Neural.  Falls back to English for unknown codes.
+    """
+    if not text:
+        return
+
+    voice = VOICES.get(lang, VOICES["en"])
+    tmp_path = os.path.join(tempfile.gettempdir(), f"aura_tts_{os.getpid()}.mp3")
+
+    try:
+        # Run async synthesis in a new event loop (sync context)
+        asyncio.run(_synthesise_edge_tts(text, voice, tmp_path))
+
+        if not _ensure_mixer():
+            print(f"[AURA] {text}")
+            return
+
+        import pygame  # noqa: PLC0415
+        pygame.mixer.music.load(tmp_path)
+        pygame.mixer.music.play()
+        while pygame.mixer.music.get_busy():
+            pygame.time.wait(50)
+
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.error("edge-tts speak() failed: %s", exc)
+        print(f"[AURA] {text}")
+    finally:
+        try:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except OSError:
+            pass
+
+
+# ---------------------------------------------------------------------------
+# TextToSpeech class (keeps existing public interface)
+# ---------------------------------------------------------------------------
+
 class TextToSpeech:
     """Converts text responses to audible speech.
 
     Supported backends (``voice.tts_backend`` in ``config.json``):
 
-    * ``"pyttsx3"`` (default) – offline, cross-platform, zero extra deps.
-    * ``"coqui"``  – Coqui XTTS v2 neural TTS; high quality, requires the
+    * ``"edge-tts"`` (default) – Microsoft Azure neural TTS via edge-tts +
+      pygame; requires an internet connection.
+    * ``"pyttsx3"``  – offline, cross-platform, zero extra deps (legacy).
+    * ``"coqui"``    – Coqui XTTS v2 neural TTS; high quality, requires the
       ``TTS`` pip package and a downloaded model.
-    * ``"piper"``  – Piper TTS binary called as a subprocess; ultra-light
+    * ``"piper"``    – Piper TTS binary called as a subprocess; ultra-light
       offline neural TTS.
 
     The naturalizer pipeline is applied before every utterance unless
@@ -59,21 +162,28 @@ class TextToSpeech:
         self._voice_cfg = config.get("voice", {})
         self._rate: int = int(self._voice_cfg.get("tts_rate", 175))
         self._volume: float = float(self._voice_cfg.get("tts_volume", 1.0))
-        self._backend: str = self._voice_cfg.get("tts_backend", "pyttsx3").lower()
+        self._backend: str = self._voice_cfg.get("tts_backend", "edge-tts").lower()
+        self._lang: str = config.get("language", "en")
 
         # Naturalizer settings
         nat_cfg = self._voice_cfg.get("naturalizer", {})
         self._naturalizer_enabled: bool = bool(nat_cfg.get("enabled", True))
         self._hesitation_rate: float = float(nat_cfg.get("hesitation_rate", 0.15))
 
-        self._engine = None  # pyttsx3 engine
+        self._engine = None  # pyttsx3 engine (legacy)
         self._coqui_tts = None  # lazy-loaded Coqui TTS instance
         self._piper_binary: str = self._voice_cfg.get("piper_binary", "piper")
         self._piper_model: str = self._voice_cfg.get("piper_model", "")
         self._warmup_thread: Optional[threading.Thread] = None
 
         if self._backend == "pyttsx3":
-            self._init_engine()
+            self._init_pyttsx3()
+        elif self._backend == "edge-tts":
+            # Warm-up mixer in background
+            self._warmup_thread = threading.Thread(
+                target=_ensure_mixer, daemon=True, name="AURA-TTS-Warmup"
+            )
+            self._warmup_thread.start()
         else:
             # Warm up non-blocking in background
             self._warmup_thread = threading.Thread(
@@ -85,7 +195,7 @@ class TextToSpeech:
     # Initialisation
     # ------------------------------------------------------------------
 
-    def _init_engine(self) -> None:
+    def _init_pyttsx3(self) -> None:
         """Initialise the pyttsx3 engine with configured rate and volume."""
         try:
             import pyttsx3  # noqa: PLC0415
@@ -95,10 +205,10 @@ class TextToSpeech:
             self._engine.setProperty("volume", self._volume)
             logger.info("TTS engine initialised (rate=%d, volume=%.1f).", self._rate, self._volume)
         except Exception as exc:  # pylint: disable=broad-except
-            logger.warning("TTS engine could not be initialised: %s", exc)
+            logger.warning("pyttsx3 TTS engine could not be initialised: %s", exc)
 
     def _warmup_backend(self) -> None:
-        """Pre-load non-pyttsx3 backends in a background thread."""
+        """Pre-load non-primary backends in a background thread."""
         try:
             if self._backend == "coqui":
                 self._load_coqui()
@@ -126,13 +236,21 @@ class TextToSpeech:
     # Public API
     # ------------------------------------------------------------------
 
-    def speak(self, text: str) -> None:
+    def speak(self, text: str, lang: str = "") -> None:
         """
         Speak the given text aloud.
 
         The text is passed through the naturalizer pipeline first (if enabled)
         to produce more human-like speech. Falls back to printing the text to
         stdout if the TTS engine is unavailable (e.g. headless CI environment).
+
+        Parameters
+        ----------
+        text:
+            The text to speak.
+        lang:
+            Optional language override (``"en"`` / ``"fr"``).  If empty, the
+            language configured at construction time is used.
         """
         if not text:
             return
@@ -144,6 +262,11 @@ class TextToSpeech:
 
         logger.info("AURA says: %s", text)
 
+        effective_lang = lang or self._lang
+
+        if self._backend == "edge-tts":
+            speak(text, lang=effective_lang)
+            return
         if self._backend == "coqui":
             self._speak_coqui(text)
             return
@@ -151,7 +274,7 @@ class TextToSpeech:
             self._speak_piper(text)
             return
 
-        # Default: pyttsx3
+        # Default legacy: pyttsx3
         if self._engine is None:
             print(f"[AURA] {text}")
             return
@@ -231,13 +354,13 @@ class TextToSpeech:
                 logger.error("Could not play WAV file '%s': %s", path, exc2)
 
     def set_rate(self, rate: int) -> None:
-        """Update the speech rate at runtime."""
+        """Update the speech rate at runtime (pyttsx3 only)."""
         self._rate = rate
         if self._engine:
             self._engine.setProperty("rate", rate)
 
     def set_volume(self, volume: float) -> None:
-        """Update the speech volume (0.0 – 1.0) at runtime."""
+        """Update the speech volume (0.0 – 1.0) at runtime (pyttsx3 only)."""
         self._volume = max(0.0, min(1.0, volume))
         if self._engine:
             self._engine.setProperty("volume", self._volume)
@@ -245,6 +368,7 @@ class TextToSpeech:
     def list_voices(self) -> list[str]:
         """Return the names of available TTS voices."""
         if self._engine is None:
-            return []
+            return list(VOICES.values())
         voices = self._engine.getProperty("voices")
         return [v.name for v in voices] if voices else []
+

@@ -234,3 +234,129 @@ class TwitchOAuth:
         except Exception as exc:  # pylint: disable=broad-except
             logger.warning("Could not fetch Twitch user info: %s", exc)
             return {}
+
+
+# ---------------------------------------------------------------------------
+# Module-level functional helpers (used by account_manager)
+# ---------------------------------------------------------------------------
+
+_ACCOUNT_SCOPES = [
+    "channel:read:subscriptions",
+    "user:read:email",
+    "chat:read",
+]
+
+
+def get_auth_url(client_id: str, redirect_uri: str = _REDIRECT_URI) -> str:
+    """Build the Twitch OAuth authorization URL.
+
+    Parameters
+    ----------
+    client_id:
+        Twitch application client ID.
+    redirect_uri:
+        OAuth redirect URI (default: ``http://localhost:8765/callback``).
+
+    Returns
+    -------
+    str
+        Full authorization URL to open in the browser.
+    """
+    from oauth.oauth_server import REDIRECT_URI as _SERVER_REDIRECT  # noqa: PLC0415
+    params = {
+        "client_id": client_id,
+        "redirect_uri": redirect_uri or _SERVER_REDIRECT,
+        "response_type": "code",
+        "scope": " ".join(_ACCOUNT_SCOPES),
+        "force_verify": "true",
+    }
+    return f"{_AUTH_URL}?{urllib.parse.urlencode(params)}"
+
+
+def exchange_code(
+    client_id: str,
+    client_secret: str,
+    code: str,
+    redirect_uri: str = _REDIRECT_URI,
+) -> dict:
+    """Exchange an authorization code for access + refresh tokens.
+
+    Parameters
+    ----------
+    client_id:
+        Twitch application client ID.
+    client_secret:
+        Twitch application client secret.
+    code:
+        Authorization code received from the OAuth callback.
+    redirect_uri:
+        Must match the redirect URI used to obtain the code.
+
+    Returns
+    -------
+    dict
+        ``{"access_token": …, "refresh_token": …}`` or empty dict on failure.
+    """
+    from oauth.oauth_server import REDIRECT_URI as _SERVER_REDIRECT  # noqa: PLC0415
+    try:
+        resp = requests.post(
+            _TOKEN_URL,
+            params={
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "code": code,
+                "grant_type": "authorization_code",
+                "redirect_uri": redirect_uri or _SERVER_REDIRECT,
+            },
+            timeout=15,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        return {
+            "access_token": data.get("access_token", ""),
+            "refresh_token": data.get("refresh_token", ""),
+        }
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.error("Twitch token exchange failed: %s", exc)
+        return {}
+
+
+def get_user_info(access_token: str, client_id: str) -> dict:
+    """Fetch the authenticated user's profile from Twitch Helix.
+
+    Parameters
+    ----------
+    access_token:
+        Valid Twitch access token.
+    client_id:
+        Twitch application client ID.
+
+    Returns
+    -------
+    dict
+        ``{"display_name": …, "profile_image_url": …, "email": …}`` or empty
+        dict on failure.
+    """
+    try:
+        resp = requests.get(
+            _USERS_URL,
+            headers={
+                "Client-Id": client_id,
+                "Authorization": f"Bearer {access_token}",
+            },
+            timeout=10,
+        )
+        resp.raise_for_status()
+        users = resp.json().get("data", [])
+        if not users:
+            return {}
+        u = users[0]
+        return {
+            "display_name": u.get("display_name", ""),
+            "profile_image_url": u.get("profile_image_url", ""),
+            "email": u.get("email", ""),
+        }
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.warning("Could not fetch Twitch user info: %s", exc)
+        return {}
+

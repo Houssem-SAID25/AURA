@@ -118,3 +118,123 @@ def collect_discord_credentials(
         "discord_bot_token": token,
         "discord_channel_id": channel_id,
     }
+
+
+# ---------------------------------------------------------------------------
+# OAuth2 user-flow helpers (used by account_manager)
+# ---------------------------------------------------------------------------
+
+_DISCORD_OAUTH_BASE = "https://discord.com/api/oauth2"
+_DISCORD_TOKEN_URL = f"{_DISCORD_OAUTH_BASE}/token"
+_DISCORD_AUTH_URL = f"{_DISCORD_OAUTH_BASE}/authorize"
+_DISCORD_USER_URL = f"{_DISCORD_API}/users/@me"
+_DISCORD_SCOPES = "identify guilds"
+
+
+def get_auth_url(client_id: str, redirect_uri: str = "") -> str:
+    """Build the Discord OAuth2 authorization URL.
+
+    Parameters
+    ----------
+    client_id:
+        Discord application client ID.
+    redirect_uri:
+        OAuth redirect URI.  If empty, the AURA local callback URI is used.
+
+    Returns
+    -------
+    str
+        Full authorization URL to open in the browser.
+    """
+    import urllib.parse  # noqa: PLC0415
+    from oauth.oauth_server import REDIRECT_URI as _SERVER_REDIRECT  # noqa: PLC0415
+
+    params = {
+        "client_id": client_id,
+        "redirect_uri": redirect_uri or _SERVER_REDIRECT,
+        "response_type": "code",
+        "scope": _DISCORD_SCOPES,
+    }
+    return f"{_DISCORD_AUTH_URL}?{urllib.parse.urlencode(params)}"
+
+
+def exchange_code(
+    client_id: str,
+    client_secret: str,
+    code: str,
+    redirect_uri: str = "",
+) -> dict:
+    """Exchange a Discord authorization code for an access token.
+
+    Parameters
+    ----------
+    client_id:
+        Discord application client ID.
+    client_secret:
+        Discord application client secret.
+    code:
+        Authorization code received from the OAuth callback.
+    redirect_uri:
+        Must match the redirect URI used to obtain the code.
+
+    Returns
+    -------
+    dict
+        ``{"access_token": …, "refresh_token": …}`` or empty dict on failure.
+    """
+    from oauth.oauth_server import REDIRECT_URI as _SERVER_REDIRECT  # noqa: PLC0415
+
+    try:
+        resp = requests.post(
+            _DISCORD_TOKEN_URL,
+            data={
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "grant_type": "authorization_code",
+                "code": code,
+                "redirect_uri": redirect_uri or _SERVER_REDIRECT,
+            },
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        return {
+            "access_token": data.get("access_token", ""),
+            "refresh_token": data.get("refresh_token", ""),
+        }
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.error("Discord token exchange failed: %s", exc)
+        return {}
+
+
+def get_user_info(access_token: str) -> dict:
+    """Fetch the authenticated Discord user's profile.
+
+    Parameters
+    ----------
+    access_token:
+        Valid Discord user access token.
+
+    Returns
+    -------
+    dict
+        ``{"display_name": …, "id": …, "email": …}`` or empty dict on failure.
+    """
+    try:
+        resp = requests.get(
+            _DISCORD_USER_URL,
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        return {
+            "display_name": data.get("username", ""),
+            "id": data.get("id", ""),
+            "email": data.get("email", ""),
+        }
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.warning("Could not fetch Discord user info: %s", exc)
+        return {}
+
